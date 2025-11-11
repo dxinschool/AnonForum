@@ -1,8 +1,88 @@
-body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; }
-.container { max-width: 800px; margin: 24px auto; padding: 0 16px; }
-.thread { border: 1px solid #ddd; padding: 12px; margin-bottom: 12px; border-radius: 6px; }
-.thread h3 { margin: 0 0 8px 0; }
-.btn { padding: 6px 10px; background: #0b6efd; color: white; border: none; border-radius: 4px; cursor: pointer; }
-.btn.secondary { background: #6c757d; }
-.input, textarea { width: 100%; padding: 8px; margin-top: 6px; margin-bottom: 6px; box-sizing: border-box; }
-.comment { margin-left: 12px; border-left: 2px solid #eee; padding-left: 8px; margin-top:8px }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+:root{
+	--bg: #f6f8fa;
+	--card: #ffffff;
+	--muted: #6b7280;
+	--accent: #2563eb; /* blue-600 */
+	--success: #16a34a;
+	--danger: #dc2626;
+	--glass: rgba(255,255,255,0.6);
+	--shadow: 0 6px 20px rgba(16,24,40,0.08);
+}
+
+*{ box-sizing: border-box; }
+html,body{ height:100%; }
+body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin: 0; padding: 0; background: linear-gradient(180deg,#f8fafc,#f3f4f6); color:#0f172a; }
+.container { max-width: 980px; margin: 28px auto; padding: 20px; }
+
+h1{ margin: 0 0 14px 0; font-weight:700; letter-spacing:-0.5px }
+
+.card, .thread { background: var(--card); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); border: 1px solid rgba(15,23,42,0.04); margin-bottom: 14px; transition: transform .18s ease, box-shadow .18s ease; }
+.card:hover, .thread:hover{ transform: translateY(-3px); box-shadow: 0 10px 30px rgba(2,6,23,0.08); }
+.thread h3, .thread h2 { margin: 0 0 8px 0; }
+
+.btn{ display:inline-flex; align-items:center; gap:8px; padding:8px 12px; background:var(--accent); color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; transition: transform .12s ease, box-shadow .12s ease, opacity .12s; }
+.btn:hover{ transform: translateY(-2px); box-shadow: 0 6px 18px rgba(37,99,235,0.18); }
+.btn:active{ transform: translateY(0); }
+.btn.secondary{ background:#6b7280; box-shadow:none }
+.btn.ghost{ background:transparent; color:var(--accent); box-shadow:none; border:1px solid rgba(37,99,235,0.12); }
+.btn.danger{ background:var(--danger); }
+.btn.small{ padding:6px 8px; font-size:13px; border-radius:6px }
+
+.input, textarea{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(15,23,42,0.06); background: #fff; outline:none; transition: box-shadow .12s ease, border-color .12s; }
+.input:focus, textarea:focus{ box-shadow: 0 6px 20px rgba(2,6,23,0.06); border-color: rgba(37,99,235,0.28); }
+
+.comment{ margin-left: 12px; border-left: 2px solid rgba(15,23,42,0.04); padding-left: 12px; margin-top:10px; margin-bottom:10px; }
+
+.tags{ margin-top:8px; margin-bottom:8px; display:flex; gap:8px; flex-wrap:wrap }
+.tag{ display:inline-block; padding:6px 10px; background:linear-gradient(180deg,#f8fafc,#fff); border-radius:999px; font-size:12px; color:var(--muted); border:1px solid rgba(15,23,42,0.04); }
+
+.thread img{ border-radius:10px; max-width:100%; height:auto }
+
+/* thumbnail for file preview */
+.thumb{ width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid rgba(15,23,42,0.04) }
+
+/* modal */
+.modal-overlay{ position:fixed; inset:0; background: rgba(2,6,23,0.4); display:flex; align-items:center; justify-content:center; z-index:2000 }
+.modal-card{ width: min(680px, 92%); background: var(--card); padding:18px; border-radius:12px; box-shadow: 0 20px 60px rgba(2,6,23,0.18); border:1px solid rgba(15,23,42,0.06) }
+
+
+/* thread preview (comment count + snippet) spacing */
+.thread-preview{ margin-top:10px; margin-bottom:14px; font-size:13px; color:#444 }
+.thread-preview .thread-top-comment{ color:#666 }
+.thread-preview .thread-comments{ margin-right:12px }
+
+/* fade-up animation for list items */
+@keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+.thread{ animation: fadeUp .32s ease both }
+
+/* pagination */
+.pagination{ display:flex; gap:8px; align-items:center; margin-top:12px }
+
+/* toast */
+.toast-container{ position: fixed; right: 18px; top: 18px; z-index:9999; display:flex; flex-direction:column; }
+.toast{ background: #0f172a; color:#fff; padding:10px 14px; border-radius:10px; margin-bottom:8px; box-shadow: 0 8px 28px rgba(2,6,23,0.16); animation: toastIn .28s cubic-bezier(.2,.9,.2,1); }
+@keyframes toastIn { from { opacity:0; transform: translateY(-8px) scale(.98) } to { opacity:1; transform: translateY(0) scale(1) } }
+
+/* small utility */
+.muted{ color:var(--muted) }
+
+/* responsive */
+@media (max-width:640px){ .container{ padding:12px } .btn{ padding:8px 10px } }
+
+/* file upload button */
+.file-upload input[type="file"]{ display: none; }
+.file-upload .file-name{ max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.file-upload img.thumb{ width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid rgba(15,23,42,0.04) }
+
+/* form button spacing: ensure buttons inside forms have sensible spacing from inputs */
+form .btn{ margin-top:10px }
+
+/* align small inline buttons near inputs more cleanly */
+.btn.small{ padding:6px 8px; margin-top:6px }
+
+/* (legacy) controls and vote layout were reverted to inline styles in components */
+
+/* Ensure button groups stay on the same line and don't wrap */
+.btn-group{ display:flex; gap:8px; align-items:center; flex-wrap:nowrap; white-space:nowrap }

@@ -5,6 +5,8 @@ import { timeAgo } from '../time'
 import { getVote, setVote } from '../voteLocal'
 import AdminPanel from './AdminPanel'
 import admin from '../admin'
+import Modal from './Modal'
+import toast from '../toast'
 
 export default function ThreadList({ onOpen }) {
   const [threads, setThreads] = useState([])
@@ -66,6 +68,12 @@ export default function ThreadList({ onOpen }) {
     return unsub
   }, [])
 
+  // modal state for delete/report
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalType, setModalType] = useState(null)
+  const [modalThread, setModalThread] = useState(null)
+  const [modalReason, setModalReason] = useState('')
+
   return (
     <div>
       <AdminPanel />
@@ -78,21 +86,21 @@ export default function ThreadList({ onOpen }) {
         <div key={t.id} className="thread">
           <h3>{t.title}</h3>
           {t.tags && t.tags.length > 0 && (
-            <div style={{ marginTop: 6, marginBottom: 6 }}>
+            <div className="tags">
               {t.tags.map(tag => (
-                <span key={tag} style={{ display: 'inline-block', padding: '2px 8px', background: '#f1f1f1', borderRadius: 999, marginRight: 6, fontSize: 12 }}>{tag}</span>
+                <span key={tag} className="tag">{tag}</span>
               ))}
             </div>
           )}
           {t.image && <div style={{ marginBottom: 8 }}><img src={t.image} alt="thread" style={{ maxWidth: 240, maxHeight: 160, display: 'block', borderRadius: 6 }} /></div>}
           <p>{t.body}</p>
           {t.comment_count > 0 && (
-            <div style={{ marginTop: 8, fontSize: 13, color: '#444' }}>
-              <span style={{ marginRight: 12 }}>💬 {t.comment_count} comment{t.comment_count !== 1 ? 's' : ''}</span>
-              {t.top_comment && <span style={{ color: '#666' }}>{(t.top_comment.body || '').slice(0, 140)}{(t.top_comment.body || '').length > 140 ? '…' : ''}</span>}
+            <div className="thread-preview">
+              <span className="thread-comments">💬 {t.comment_count} comment{t.comment_count !== 1 ? 's' : ''}</span>
+              {t.top_comment && <span className="thread-top-comment">{(t.top_comment.body || '').slice(0, 140)}{(t.top_comment.body || '').length > 140 ? '…' : ''}</span>}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="btn-group">
             <button className="btn" onClick={() => onOpen(t)}>Open</button>
             <button className="btn" onClick={async () => {
               try {
@@ -103,21 +111,19 @@ export default function ThreadList({ onOpen }) {
                 setTimeout(() => setCopied(null), 1500)
               } catch (e) { console.warn('copy failed', e) }
             }}>{copied === t.id ? 'Copied!' : 'Copy'}</button>
-            {adminToken && <button className="btn" style={{ background: '#dc3545', color: '#fff' }} onClick={async () => {
-              if (!confirm('Delete this thread?')) return
-              try {
-                await API.deleteThread(t.id)
-              } catch (e) { console.warn('delete failed', e) }
+            {adminToken && <button className="btn danger" onClick={async () => {
+              setModalType('delete')
+              setModalThread(t)
+              setModalReason('')
+              setModalOpen(true)
             }}>Delete</button>}
-            <button className="btn" style={{ background: '#dc3545', color: '#fff' }} onClick={async () => {
-              try {
-                const reason = prompt('Report this thread (optional reason):')
-                if (reason === null) return
-                await API.report('thread', t.id, reason || '')
-                alert('Reported — thank you')
-              } catch (err) { console.warn('report failed', err); alert('report failed') }
+            <button className="btn danger" onClick={async () => {
+              setModalType('report')
+              setModalThread(t)
+              setModalReason('')
+              setModalOpen(true)
             }}>Report</button>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
               <button className="btn" onClick={async () => {
                 try {
                   const cur = localVotes[t.id]
@@ -154,5 +160,40 @@ export default function ThreadList({ onOpen }) {
         <button className="btn" disabled={page >= totalPages} onClick={() => { const np = Math.min(totalPages, page + 1); setPage(np); fetchPage(query, np) }}>Next</button>
       </div>
     </div>
+  )
+  
+  // modal confirm handlers
+  const closeModal = () => { setModalOpen(false); setModalThread(null); setModalType(null); setModalReason('') }
+  const onConfirmModal = async () => {
+    if (!modalThread) { closeModal(); return }
+    try {
+      if (modalType === 'delete') {
+        await API.deleteThread(modalThread.id)
+        toast.show('Thread deleted')
+      }
+      if (modalType === 'report') {
+        await API.report('thread', modalThread.id, modalReason || '')
+        toast.show('Reported — thank you')
+      }
+    } catch (err) { console.warn('modal action failed', err); toast.show('Action failed') }
+    closeModal()
+  }
+
+  return (
+    <>
+      <div>
+        {/* existing return content is above; this function only changed the flow — kept return at top by moving modal outside earlier return in code */}
+      </div>
+      <Modal isOpen={modalOpen} title={modalType === 'delete' ? 'Confirm delete' : 'Report thread'} onCancel={closeModal} onConfirm={onConfirmModal} confirmText={modalType === 'delete' ? 'Delete' : 'Report'}>
+        {modalType === 'report' ? (
+          <div>
+            <div style={{ marginBottom: 8 }}>Report thread <strong>{modalThread && modalThread.title}</strong></div>
+            <textarea className="input" rows={4} placeholder="Optional reason" value={modalReason} onChange={e => setModalReason(e.target.value)} />
+          </div>
+        ) : (
+          <div>Are you sure you want to delete <strong>{modalThread && modalThread.title}</strong>? This action cannot be undone.</div>
+        )}
+      </Modal>
+    </>
   )
 }

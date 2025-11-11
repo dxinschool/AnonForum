@@ -4,6 +4,7 @@ import { subscribe } from '../ws'
 import { timeAgo } from '../time'
 import { getVote, setVote } from '../voteLocal'
 import AdminPanel from './AdminPanel'
+import toast from '../toast'
 
 function Comment({ c, onReply }) {
   return (
@@ -72,45 +73,45 @@ export default function Thread({ threadId }) {
       <div className="thread">
         <h2>{data.thread.title}</h2>
         {data.thread.tags && data.thread.tags.length > 0 && (
-          <div style={{ marginTop: 6, marginBottom: 6 }}>
+          <div className="tags">
             {data.thread.tags.map(tag => (
-              <span key={tag} style={{ display: 'inline-block', padding: '2px 8px', background: '#f1f1f1', borderRadius: 999, marginRight: 6, fontSize: 12 }}>{tag}</span>
+              <span key={tag} className="tag">{tag}</span>
             ))}
           </div>
         )}
         {data.thread.image && <div style={{ marginBottom: 12 }}><img src={data.thread.image} alt="thread" style={{ maxWidth: '100%', maxHeight: 480, borderRadius: 6 }} /></div>}
         <p>{data.thread.body}</p>
-        <div style={{ marginTop: 8 }}>
+        <div className="btn-group" style={{ marginTop: 8 }}>
           <button className="btn" onClick={async () => {
             try {
               const text = (data.thread.title || '') + '\n\n' + (data.thread.body || '')
               await navigator.clipboard.writeText(text)
-              alert('Copied to clipboard')
-            } catch (e) { console.warn('copy failed', e) }
+              toast.show('Copied to clipboard')
+            } catch (e) { console.warn('copy failed', e); toast.show('Copy failed') }
           }}>Copy</button>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button className="btn" onClick={async () => {
-              try {
-                const cur = getVote(data.thread.id)
-                const want = 1
-                await API.vote('thread', data.thread.id, want)
-                if (cur === want) { setVote(data.thread.id, null); setMyVote(null) }
-                else { setVote(data.thread.id, want); setMyVote(want) }
-              } catch (err) { console.warn('vote failed', err) }
-            }} style={{ background: myVote === 1 ? '#28a745' : undefined, color: myVote === 1 ? '#fff' : undefined }}>▲</button>
-            <button className="btn" onClick={async () => {
-              try {
-                const cur = getVote(data.thread.id)
-                const want = -1
-                await API.vote('thread', data.thread.id, want)
-                if (cur === want) { setVote(data.thread.id, null); setMyVote(null) }
-                else { setVote(data.thread.id, want); setMyVote(want) }
-              } catch (err) { console.warn('vote failed', err) }
-            }} style={{ background: myVote === -1 ? '#dc3545' : undefined, color: myVote === -1 ? '#fff' : undefined }}>▼</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button className="btn" onClick={async () => {
+                try {
+                  const cur = getVote(data.thread.id)
+                  const want = 1
+                  await API.vote('thread', data.thread.id, want)
+                  if (cur === want) { setVote(data.thread.id, null); setMyVote(null) }
+                  else { setVote(data.thread.id, want); setMyVote(want) }
+                } catch (err) { console.warn('vote failed', err) }
+              }} style={{ background: myVote === 1 ? '#28a745' : undefined, color: myVote === 1 ? '#fff' : undefined }}>▲</button>
+              <button className="btn" onClick={async () => {
+                try {
+                  const cur = getVote(data.thread.id)
+                  const want = -1
+                  await API.vote('thread', data.thread.id, want)
+                  if (cur === want) { setVote(data.thread.id, null); setMyVote(null) }
+                  else { setVote(data.thread.id, want); setMyVote(want) }
+                } catch (err) { console.warn('vote failed', err) }
+              }} style={{ background: myVote === -1 ? '#dc3545' : undefined, color: myVote === -1 ? '#fff' : undefined }}>▼</button>
+            </div>
+            <div><small>score: {data.thread.score}</small> — <small>{timeAgo(data.thread.created_at)}</small></div>
           </div>
-          <div><small>score: {data.thread.score}</small> — <small>{timeAgo(data.thread.created_at)}</small></div>
         </div>
       </div>
 
