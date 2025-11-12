@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
 
 :root{
+	/* inform UA and form controls we support both schemes */
+	color-scheme: light dark;
 	--bg: #f6f8fa;
 	--card: #ffffff;
 	--muted: #6b7280;
@@ -9,16 +11,76 @@
 	--danger: #dc2626;
 	--glass: rgba(255,255,255,0.6);
 	--shadow: 0 6px 20px rgba(16,24,40,0.08);
+	--text: #0f172a;
+	--border: rgba(15,23,42,0.04);
+	--border-strong: rgba(15,23,42,0.06);
+	--input-bg: #fff;
+	--tag-start: #f8fafc;
+	--tag-end: #fff;
+}
+
+/* Notice / announcement / rules styles (theme-aware) */
+:root{
+	/* announcement (yellow) */
+	--announcement-bg: #fff3cd;
+	--announcement-border: #ffeeba;
+	--announcement-text: #6b4f00;
+
+	/* community rules (green) */
+	--rules-bg: #e9f7ef;
+	--rules-border: #d4edda;
+	--rules-text: #064e3b;
+}
+
+/* Dark theme */
+[data-theme='dark']{
+	--bg: #0b1220;
+	--card: #07101a;
+	--muted: #9ca3af;
+	--accent: #60a5fa;
+	--success: #34d399;
+	--danger: #f87171;
+	--glass: rgba(255,255,255,0.04);
+	--shadow: 0 6px 20px rgba(2,6,23,0.6);
+	--text: #e6eef8;
+	--border: rgba(255,255,255,0.04);
+	--border-strong: rgba(255,255,255,0.06);
+	--input-bg: var(--card);
+	--tag-start: #0b1220;
+	--tag-end: #07101a;
+}
+
+/* dark overrides for notices */
+[data-theme='dark']{
+	--announcement-bg: rgba(255,239,159,0.06); /* subtle warm */
+	--announcement-border: rgba(255,223,93,0.12);
+	--announcement-text: #f6e7b6;
+
+	--rules-bg: rgba(34,197,94,0.06);
+	--rules-border: rgba(34,197,94,0.12);
+	--rules-text: #bbf7d0;
+}
+
+[data-theme='dark'] body { background: linear-gradient(180deg,var(--bg),#081425); color: var(--text) }
+
+/* Theme transition helper:
+   Add `.theme-transition` to <html> when toggling to animate color/background/border changes,
+   then remove it after ~320ms. Disabled when users prefer reduced motion. */
+.theme-transition, .theme-transition * {
+	transition: background-color 260ms ease, color 260ms ease, border-color 260ms ease, box-shadow 260ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+	.theme-transition, .theme-transition * { transition: none !important; }
 }
 
 *{ box-sizing: border-box; }
 html,body{ height:100%; }
-body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin: 0; padding: 0; background: linear-gradient(180deg,#f8fafc,#f3f4f6); color:#0f172a; }
+body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin: 0; padding: 0; background: linear-gradient(180deg,var(--bg),#f3f4f6); color:var(--text); }
 .container { max-width: 980px; margin: 28px auto; padding: 20px; }
 
 h1{ margin: 0 0 14px 0; font-weight:700; letter-spacing:-0.5px }
 
-.card, .thread { background: var(--card); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); border: 1px solid rgba(15,23,42,0.04); margin-bottom: 14px; transition: transform .18s ease, box-shadow .18s ease; }
+.card, .thread { background: var(--card); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 14px; transition: transform .18s ease, box-shadow .18s ease; }
 .card:hover, .thread:hover{ transform: translateY(-3px); box-shadow: 0 10px 30px rgba(2,6,23,0.08); }
 .thread h3, .thread h2 { margin: 0 0 8px 0; }
 
@@ -30,27 +92,112 @@ h1{ margin: 0 0 14px 0; font-weight:700; letter-spacing:-0.5px }
 .btn.danger{ background:var(--danger); }
 .btn.small{ padding:6px 8px; font-size:13px; border-radius:6px }
 
-.input, textarea{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(15,23,42,0.06); background: #fff; outline:none; transition: box-shadow .12s ease, border-color .12s; }
+/* dark-mode overrides for ghost buttons (Share uses .btn.ghost) */
+[data-theme='dark'] .btn.ghost {
+	/* Make ghost buttons look like the primary filled buttons in dark mode */
+	background: var(--accent);
+	color: #fff;
+	border-color: transparent;
+	box-shadow: 0 6px 18px rgba(37,99,235,0.12);
+}
+[data-theme='dark'] .btn.ghost:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 10px 26px rgba(37,99,235,0.16);
+	opacity: 0.98;
+}
+
+.input, textarea{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border-strong); background: var(--input-bg); outline:none; transition: box-shadow .12s ease, border-color .12s; }
 .input:focus, textarea:focus{ box-shadow: 0 6px 20px rgba(2,6,23,0.06); border-color: rgba(37,99,235,0.28); }
 
-.comment{ margin-left: 12px; border-left: 2px solid rgba(15,23,42,0.04); padding-left: 12px; margin-top:10px; margin-bottom:10px; }
+/* ensure form inputs and cards use readable text color in both themes */
+.card, .thread, .modal-card, .animated-card { color: var(--text); }
+.input, textarea { color: var(--text); }
+
+/* placeholder visibility */
+.input::placeholder, textarea::placeholder { color: rgba(15,23,42,0.35); }
+[data-theme='dark'] .input::placeholder, [data-theme='dark'] textarea::placeholder { color: rgba(230,238,248,0.42); }
+
+/* emoji button used in reaction bar */
+.emoji-btn { background: transparent; border: 1px solid rgba(0,0,0,0.12); color: inherit; padding: 6px 8px; border-radius:6px; display: inline-flex; align-items: center; gap:6px; }
+[data-theme='dark'] .emoji-btn { border-color: rgba(255,255,255,0.12); }
+
+/* generic notice wrapper used for announcement and rules */
+.notice{ padding: 10px; margin-bottom: 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+.notice .notice-body{ margin-top: 6px }
+
+.notice.announcement{ background: var(--announcement-bg); border-color: var(--announcement-border); color: var(--announcement-text); }
+.notice.rules{ background: var(--rules-bg); border-color: var(--rules-border); color: var(--rules-text); }
+
+/* ensure body/text inside notices is readable in both themes */
+.notice, .notice .notice-body, .notice strong { color: inherit }
+
+.comment{ margin-left: 12px; border-left: 2px solid var(--border); padding-left: 12px; margin-top:10px; margin-bottom:10px; }
 
 .tags{ margin-top:8px; margin-bottom:8px; display:flex; gap:8px; flex-wrap:wrap }
-.tag{ display:inline-block; padding:6px 10px; background:linear-gradient(180deg,#f8fafc,#fff); border-radius:999px; font-size:12px; color:var(--muted); border:1px solid rgba(15,23,42,0.04); }
+.tag{ display:inline-block; padding:6px 10px; background:linear-gradient(180deg,var(--tag-start),var(--tag-end)); border-radius:999px; font-size:12px; color:var(--muted); border:1px solid var(--border); }
 
 .thread img{ border-radius:10px; max-width:100%; height:auto }
 
 /* thumbnail for file preview */
-.thumb{ width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid rgba(15,23,42,0.04) }
+.thumb{ width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--border) }
+
+/* Admin panel responsive layout */
+.admin-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 720px){ .admin-grid{ grid-template-columns: 1fr; } }
+
+.admin-panel{ border: 1px solid var(--border); padding: 8px; border-radius: 6px; background: var(--card); }
+
+.audit-list{ margin-top: 8px; max-height: 36vh; overflow: auto; padding-right: 6px; box-sizing: border-box; }
+.audit-row{ padding: 8px 6px; border-bottom: 1px solid var(--border); min-width: 0; }
+.audit-action{ font-size: 12px; color: var(--text); }
+.audit-time{ font-size: 11px; color: var(--muted); }
+.audit-details{ margin-top: 6px; font-size: 13px; color: var(--muted); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.muted-small{ color: var(--muted); margin-left: 6px }
+
+/* Allow panels to shrink inside grid to avoid horizontal overflow */
+.admin-panel{ min-width: 0 }
+
+/* Global chat styles */
+:root{
+	--chat-bg: #fafafa;
+	--chat-border: #ddd;
+	--chat-muted: #555;
+	--chat-pinned-bg: #fffef6;
+	--chat-pinned-accent: #b45309;
+}
+
+[data-theme='dark']{
+	--chat-bg: #07101a; /* subtle card-like */
+	--chat-border: rgba(255,255,255,0.04);
+	--chat-muted: #9ca3af;
+	--chat-pinned-bg: rgba(245,163,79,0.06); /* warm subtle */
+	--chat-pinned-accent: #ffddb1;
+}
+
+.chat-container{ border: 1px solid var(--chat-border); padding: 8px; height: 62vh; overflow: auto; border-radius: 6px; background: var(--chat-bg); }
+.chat-message{ padding: 6px 4px; border-bottom: 1px solid var(--border); }
+.chat-message .chat-meta{ font-size:12px; color: var(--chat-muted); }
+.chat-message .chat-text{ margin-top:6px; color: var(--text); }
+.chat-message .chat-thumb{ margin-top:8px }
+
+.chat-message.pinned{ background: var(--chat-pinned-bg); border-bottom: 1px solid var(--border-strong); }
+.chat-message.pinned .chat-meta .pinned-label{ margin-left:8px; color: var(--chat-pinned-accent); font-weight:700 }
+
+.chat-form{ margin-top:8px; display:flex; gap:8px; align-items:center }
+.chat-form .input{ flex: 1 }
+
+/* Small tweaks for attached preview area */
+.chat-preview{ margin-top:8px; display:flex; align-items:center; gap:8px }
+.chat-preview .thumb{ width:56px; height:56px }
 
 /* modal */
 .modal-overlay{ position:fixed; inset:0; background: rgba(2,6,23,0.4); display:flex; align-items:center; justify-content:center; z-index:2000 }
-.modal-card{ width: min(680px, 92%); background: var(--card); padding:18px; border-radius:12px; box-shadow: 0 20px 60px rgba(2,6,23,0.18); border:1px solid rgba(15,23,42,0.06) }
+.modal-card{ width: min(680px, 92%); background: var(--card); padding:18px; border-radius:12px; box-shadow: 0 20px 60px rgba(2,6,23,0.18); border:1px solid var(--border-strong) }
 
 
 /* thread preview (comment count + snippet) spacing */
-.thread-preview{ margin-top:10px; margin-bottom:14px; font-size:13px; color:#444 }
-.thread-preview .thread-top-comment{ color:#666 }
+.thread-preview{ margin-top:10px; margin-bottom:14px; font-size:13px; color:var(--muted) }
+.thread-preview .thread-top-comment{ color:var(--muted) }
 .thread-preview .thread-comments{ margin-right:12px }
 
 /* fade-up animation for list items */
@@ -58,11 +205,23 @@ h1{ margin: 0 0 14px 0; font-weight:700; letter-spacing:-0.5px }
 .thread{ animation: fadeUp .32s ease both }
 
 /* pagination */
-.pagination{ display:flex; gap:8px; align-items:center; margin-top:12px }
+.pagination{ display:flex; gap:8px; align-items:center; margin-top:12px; justify-content:center }
+
+/* animated modal overlay/card */
+.animated-overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(2,6,23,0.35); z-index:2000; opacity: 0; transition: opacity 260ms cubic-bezier(.2,.9,.2,1); backdrop-filter: blur(4px); padding:24px; }
+.animated-overlay.open{ opacity: 1 }
+.animated-overlay.closing{ opacity: 0 }
+.animated-card{ position:relative; background: var(--card); padding:18px; border-radius:12px; box-shadow: 0 24px 80px rgba(2,6,23,0.2); border:1px solid var(--border-strong); transform: translateY(10px) scale(.985); opacity: 0; transition: transform 300ms cubic-bezier(.2,.8,.2,1), opacity 260ms cubic-bezier(.2,.8,.2,1); will-change: transform, opacity; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); overflow: auto; }
+.animated-card.open{ transform: translateY(0) scale(1); opacity: 1 }
+.animated-card.closing{ transform: translateY(8px) scale(.995); opacity: 0 }
+
+
 
 /* toast */
 .toast-container{ position: fixed; right: 18px; top: 18px; z-index:9999; display:flex; flex-direction:column; }
 .toast{ background: #0f172a; color:#fff; padding:10px 14px; border-radius:10px; margin-bottom:8px; box-shadow: 0 8px 28px rgba(2,6,23,0.16); animation: toastIn .28s cubic-bezier(.2,.9,.2,1); }
+/* error toast (red) */
+.toast-error{ background: var(--danger); color: #fff; box-shadow: 0 8px 28px rgba(220,38,38,0.16); }
 @keyframes toastIn { from { opacity:0; transform: translateY(-8px) scale(.98) } to { opacity:1; transform: translateY(0) scale(1) } }
 
 /* small utility */
@@ -74,7 +233,7 @@ h1{ margin: 0 0 14px 0; font-weight:700; letter-spacing:-0.5px }
 /* file upload button */
 .file-upload input[type="file"]{ display: none; }
 .file-upload .file-name{ max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.file-upload img.thumb{ width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid rgba(15,23,42,0.04) }
+.file-upload img.thumb{ width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--border) }
 
 /* form button spacing: ensure buttons inside forms have sensible spacing from inputs */
 form .btn{ margin-top:10px }
@@ -86,3 +245,10 @@ form .btn{ margin-top:10px }
 
 /* Ensure button groups stay on the same line and don't wrap */
 .btn-group{ display:flex; gap:8px; align-items:center; flex-wrap:nowrap; white-space:nowrap }
+
+/* small pill to highlight ids in admin or lists */
+.id-chip{ display:inline-block; padding:4px 8px; background: linear-gradient(180deg,#eef2ff,#f8fafc); color: var(--accent); border-radius:999px; font-weight:600; margin-left:6px; border:1px solid rgba(37,99,235,0.08); font-size:13px }
+
+.report-row { background: var(--card); }
+
+/* body styles are declared earlier */

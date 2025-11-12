@@ -3,14 +3,15 @@ import API from '../api'
 import { subscribe } from '../ws'
 import { timeAgo } from '../time'
 import { getVote, setVote } from '../voteLocal'
-import AdminPanel from './AdminPanel'
 import admin from '../admin'
 import Modal from './Modal'
+import ImageLightbox from './ImageLightbox'
 import toast from '../toast'
 
 export default function ThreadList({ onOpen }) {
   const [threads, setThreads] = useState([])
   const [copied, setCopied] = useState(null)
+  const [shareCopied, setShareCopied] = useState(null)
   const [page, setPage] = useState(1)
   const perPage = 5
   const [total, setTotal] = useState(0)
@@ -19,6 +20,12 @@ export default function ThreadList({ onOpen }) {
   // search state (declared early so fetchPage can reference it)
   const [query, setQuery] = useState('')
   const qTimer = useRef(null)
+
+  // reactions and polls maps
+  // reactions map: { [threadId]: { emoji: count|{count,voters}, ... } }
+  const [reactionsMap, setReactionsMap] = useState({})
+  // polls map: { [threadId]: [poll, ...] }
+  const [pollsMap, setPollsMap] = useState({})
 
   // fetch a page of threads (search q optional)
   const fetchPage = (q, p) => {
@@ -29,6 +36,18 @@ export default function ThreadList({ onOpen }) {
       setTotal(res.total || 0)
       setTotalPages(res.total_pages || Math.max(1, Math.ceil((res.total || 0) / perPage)))
       setPage(res.page || qp)
+      // fetch reactions and polls for visible threads
+      try {
+        const ids = (res.items || []).map(t => t.id)
+        ids.forEach(id => {
+          API.getReactions('thread', id).then(r => {
+            setReactionsMap(prev => ({ ...prev, [id]: r || {} }))
+          }).catch(() => {})
+          API.listPollsForThread(id).then(pl => {
+            setPollsMap(prev => ({ ...prev, [id]: pl || [] }))
+          }).catch(() => {})
+        })
+      } catch (e) { /* ignore */ }
     }).catch(err => { console.warn('fetchPage failed', err) })
   }
 
@@ -38,6 +57,10 @@ export default function ThreadList({ onOpen }) {
       // refresh the current page on relevant updates so pagination stays consistent
       if (['thread', 'vote', 'delete_thread', 'comment', 'announcement'].includes(msg.type)) {
         fetchPage(query, page)
+      }
+      // update reaction aggregates live
+      if (msg.type === 'reaction' && msg.data && msg.data.target_type === 'thread') {
+        setReactionsMap(prev => ({ ...prev, [msg.data.target_id]: msg.data.reactions || {} }))
       }
     })
     return () => unsub()
@@ -68,15 +91,33 @@ export default function ThreadList({ onOpen }) {
     return unsub
   }, [])
 
+
   // modal state for delete/report
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState(null)
   const [modalThread, setModalThread] = useState(null)
   const [modalReason, setModalReason] = useState('')
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerSrc, setViewerSrc] = useState(null)
+  // share modal removed — Share button now copies permalink directly
 
-  return (
+  // poll voting from the list
+  const handlePollVote = async (pollId, optionId, threadId) => {
+    try {
+      let voter = localStorage.getItem('anon_id')
+      if (!voter) { voter = 'anon_' + Math.random().toString(36).slice(2,10); try { localStorage.setItem('anon_id', voter) } catch (e) {} }
+      const out = await API.votePoll(pollId, optionId, voter)
+      if (!out) { toast.show('Voted'); fetchPage(query, page); return }
+      setPollsMap(prev => {
+        const arr = prev[threadId] || []
+        const next = arr.map(p => p.id === out.id ? out : p)
+        return { ...prev, [threadId]: next }
+      })
+    } catch (e) { console.warn('poll vote failed', e); toast.show('Vote failed') }
+  }
+
+  const main = (
     <div>
-      <AdminPanel />
       <div style={{ marginBottom: 12 }}>
         <input className="input" placeholder="Search threads..." value={query} onChange={e => setQuery(e.target.value)} />
       </div>
@@ -92,7 +133,7 @@ export default function ThreadList({ onOpen }) {
               ))}
             </div>
           )}
-          {t.image && <div style={{ marginBottom: 8 }}><img src={t.image} alt="thread" style={{ maxWidth: 240, maxHeight: 160, display: 'block', borderRadius: 6 }} /></div>}
+          {t.image && <div style={{ marginBottom: 8 }}><img src={t.image} alt="thread" style={{ maxWidth: 240, maxHeight: 160, display: 'block', borderRadius: 6, cursor: 'pointer' }} onClick={() => { setViewerSrc(t.image); setViewerOpen(true) }} /></div>}
           <p>{t.body}</p>
           {t.comment_count > 0 && (
             <div className="thread-preview">
@@ -102,6 +143,17 @@ export default function ThreadList({ onOpen }) {
           )}
           <div className="btn-group">
             <button className="btn" onClick={() => onOpen(t)}>Open</button>
+            <button className="btn ghost" onClick={async () => {
+              try {
+                // copy share link that points to the frontend origin and includes the thread query so
+                // opening the link will both show the /t/:id preview for crawlers and open the thread in the SPA
+                const url = window.location.origin + '/t/' + encodeURIComponent(t.id) + '?thread=' + encodeURIComponent(t.id)
+                await navigator.clipboard.writeText(url)
+                toast.show('Link copied')
+                setShareCopied(t.id)
+                setTimeout(() => setShareCopied(null), 1500)
+              } catch (e) { console.warn('copy failed', e); toast.show('Copy failed') }
+            }}>{shareCopied === t.id ? 'Copied!' : 'Share'}</button>
             <button className="btn" onClick={async () => {
               try {
                 const text = (t.title || '') + '\n\n' + (t.body || '')
@@ -114,10 +166,10 @@ export default function ThreadList({ onOpen }) {
             {adminToken && <button className="btn danger" onClick={async () => {
               setModalType('delete')
               setModalThread(t)
-              setModalReason('')
               setModalOpen(true)
             }}>Delete</button>}
             <button className="btn danger" onClick={async () => {
+              // open report modal for this thread
               setModalType('report')
               setModalThread(t)
               setModalReason('')
@@ -152,26 +204,74 @@ export default function ThreadList({ onOpen }) {
               <div style={{ marginLeft: 8 }}><small>score: {t.score ?? 0}</small> — <small>{timeAgo(t.created_at)}</small></div>
             </div>
           </div>
+          {/* reactions bar for quick reacting without opening thread */}
+          <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+            {['👍','❤️','😄','😮','😢','👎'].map(emoji => {
+              const counts = reactionsMap[t.id] || {}
+              // support two shapes from the server: { emoji: number } or { emoji: { count, voters } }
+              const raw = counts[emoji]
+              const cnt = (raw && typeof raw === 'object') ? (raw.count || 0) : (raw || 0)
+              return (
+                <button key={emoji} type="button" className="emoji-btn" onClick={async () => {
+                  try {
+                    // ensure anon id
+                    let voter = localStorage.getItem('anon_id')
+                    if (!voter) { voter = 'anon_' + Math.random().toString(36).slice(2,10); try { localStorage.setItem('anon_id', voter) } catch (e) {} }
+                    console.debug('adding reaction', { thread: t.id, emoji, voter })
+                    const out = await API.addReaction('thread', t.id, emoji, voter)
+                    // validate response shape
+                    if (!out || typeof out !== 'object') {
+                      console.warn('unexpected reaction response', out)
+                      toast.show('Reaction saved')
+                      return
+                    }
+                    setReactionsMap(prev => ({ ...prev, [t.id]: out || {} }))
+                  } catch (e) { console.warn('reaction failed', e); toast.show('Reaction failed') }
+                }}>
+                  <span style={{ marginRight: 6 }}>{emoji}</span>
+                  <small style={{ color: 'var(--muted)' }}>{cnt}</small>
+                </button>
+              )
+            })}
+          </div>
+          {/* inline polls (vote from list) */}
+          {pollsMap[t.id] && pollsMap[t.id].length > 0 && pollsMap[t.id].map(poll => (
+            <div key={poll.id} style={{ marginTop: 8, padding: 8, borderRadius: 8, border: '1px solid rgba(0,0,0,0.06)' }}>
+              <div style={{ fontWeight: 600 }}>{poll.question}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                {(poll.options || []).map(opt => (
+                  <button key={opt.id} className="btn small" onClick={async () => handlePollVote(poll.id, opt.id, t.id)}>
+                    <span style={{ marginRight: 8 }}>{opt.label || opt.text || opt.name || ''}</span>
+                    <small style={{ marginLeft: 6 }}>{opt.votes || 0}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ))}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+      <div className="pagination">
         <button className="btn" disabled={page <= 1} onClick={() => { const np = Math.max(1, page - 1); setPage(np); fetchPage(query, np) }}>Prev</button>
-        <div>Page {page} / {totalPages} ({total} threads)</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ marginRight: 8 }}>Page</div>
+          <input type="number" min={1} max={totalPages} value={page} onChange={e => setPage(Number(e.target.value || 1))} style={{ width: 72, padding: 8, borderRadius: 8, border: '1px solid rgba(15,23,42,0.06)' }} />
+          <button className="btn" onClick={() => { const np = Math.max(1, Math.min(totalPages, page || 1)); setPage(np); fetchPage(query, np) }}>Go</button>
+          <div style={{ marginLeft: 12 }}> / {totalPages} ({total} threads)</div>
+        </div>
         <button className="btn" disabled={page >= totalPages} onClick={() => { const np = Math.min(totalPages, page + 1); setPage(np); fetchPage(query, np) }}>Next</button>
       </div>
     </div>
   )
-  
+
   // modal confirm handlers
-  const closeModal = () => { setModalOpen(false); setModalThread(null); setModalType(null); setModalReason('') }
+  const closeModal = () => { setModalOpen(false); setModalThread(null); setModalType(null) }
   const onConfirmModal = async () => {
     if (!modalThread) { closeModal(); return }
     try {
       if (modalType === 'delete') {
         await API.deleteThread(modalThread.id)
         toast.show('Thread deleted')
-      }
-      if (modalType === 'report') {
+      } else if (modalType === 'report') {
         await API.report('thread', modalThread.id, modalReason || '')
         toast.show('Reported — thank you')
       }
@@ -181,10 +281,9 @@ export default function ThreadList({ onOpen }) {
 
   return (
     <>
-      <div>
-        {/* existing return content is above; this function only changed the flow — kept return at top by moving modal outside earlier return in code */}
-      </div>
-      <Modal isOpen={modalOpen} title={modalType === 'delete' ? 'Confirm delete' : 'Report thread'} onCancel={closeModal} onConfirm={onConfirmModal} confirmText={modalType === 'delete' ? 'Delete' : 'Report'}>
+      {main}
+  <ImageLightbox isOpen={viewerOpen} src={viewerSrc} onClose={() => setViewerOpen(false)} />
+      <Modal isOpen={modalOpen} title={modalType === 'report' ? 'Report thread' : 'Confirm delete'} onCancel={closeModal} onConfirm={onConfirmModal} confirmText={modalType === 'report' ? 'Report' : 'Delete'}>
         {modalType === 'report' ? (
           <div>
             <div style={{ marginBottom: 8 }}>Report thread <strong>{modalThread && modalThread.title}</strong></div>

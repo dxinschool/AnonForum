@@ -9,6 +9,10 @@ export default function NewThread({ onCreate }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [tags, setTags] = useState('')
+  const [pollQuestion, setPollQuestion] = useState('')
+  // interactive options array instead of a raw textarea
+  const [pollOptions, setPollOptions] = useState(['', ''])
+  const [createPoll, setCreatePoll] = useState(false)
 
   const TITLE_MAX = 200
   const BODY_MAX = 2000
@@ -21,15 +25,34 @@ export default function NewThread({ onCreate }) {
     setLoading(true)
     try {
       let t
-      if (file) {
-        t = await API.createThreadWithFile(title, body, file, tags)
-      } else {
-        t = await API.createThread(title, body, tags)
+      try {
+        if (file) {
+          t = await API.createThreadWithFile(title, body, file, tags)
+        } else {
+          t = await API.createThread(title, body, tags)
+        }
+      } catch (err) {
+        console.warn('create thread failed', err)
+        // show a red/error toast to warn the user (e.g. blocklist word)
+        try { toast.show(err && err.message ? err.message : 'Post failed', { type: 'error' }) } catch (e) { /* ignore */ }
+        return
+      }
+      // if poll requested, create poll
+      if (createPoll && pollQuestion.trim()) {
+        try {
+          const options = (pollOptions || []).map(s => String(s || '').trim()).filter(Boolean).slice(0, 6)
+          if (options.length >= 2) {
+            await API.createPoll(t.id, pollQuestion, options)
+          }
+        } catch (e) { console.warn('create poll failed', e) }
       }
       setTitle('')
       setBody('')
       setFile(null)
       setTags('')
+      setPollQuestion('')
+      setPollOptions(['', ''])
+      setCreatePoll(false)
       if (onCreate) onCreate(t)
     } finally {
       setLoading(false)
@@ -73,6 +96,37 @@ export default function NewThread({ onCreate }) {
   </div>
   <div style={{ marginTop: 8 }}>
     <input className="input" placeholder="Tags (comma separated, optional)" value={tags} onChange={e => setTags(e.target.value)} />
+  </div>
+  <div style={{ marginTop: 8 }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input type="checkbox" checked={createPoll} onChange={e => setCreatePoll(e.target.checked)} /> Create poll
+    </label>
+    {createPoll && (
+      <div style={{ marginTop: 8 }}>
+        <input className="input" placeholder="Poll question" value={pollQuestion} onChange={e => setPollQuestion(e.target.value)} />
+        <div style={{ marginTop: 6 }}>
+          {(pollOptions || []).map((opt, idx) => (
+            <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <input className="input" placeholder={`Option ${idx + 1}`} value={opt} onChange={e => {
+                const arr = [...pollOptions]; arr[idx] = e.target.value; setPollOptions(arr)
+              }} />
+              <button type="button" className="btn secondary small" onClick={() => {
+                // remove option (but keep minimum 2)
+                if ((pollOptions || []).length <= 2) return
+                const arr = [...pollOptions]; arr.splice(idx, 1); setPollOptions(arr)
+              }}>Remove</button>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn small" onClick={() => {
+              if ((pollOptions || []).length >= 6) return toast.show('Max 6 options')
+              setPollOptions([...(pollOptions || []), ''])
+            }}>Add option</button>
+            <small style={{ color: '#6b7280', alignSelf: 'center' }}>Min 2 options, max 6</small>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
       <button className="btn" type="submit" disabled={loading}>{loading ? 'Posting...' : 'Post'}</button>
     </form>

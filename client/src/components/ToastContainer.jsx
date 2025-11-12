@@ -15,7 +15,7 @@ export default function ToastContainer() {
   return (
     <div className="toast-container">
       {toasts.map(t => (
-        <div key={t.id} className="toast">{t.text}</div>
+        <div key={t.id} className={`toast ${t.type === 'error' ? 'toast-error' : ''}`}>{t.text}</div>
       ))}
     </div>
   )

@@ -14,7 +14,7 @@ const file = path.join(__dirname, 'db.json')
 const adapter = new JSONFile(file)
 
 // Provide default data as the second argument to Low to avoid the "missing default data" error
-const defaultData = { threads: [], comments: [], votes: [], chat: [], admin_tokens: [], announcement: { text: 'Welcome! This is an anonymous forum. Be kind and follow the rules.' }, rules: { text: 'Be respectful. No doxxing. Report abuse.' }, reports: [] }
+const defaultData = { threads: [], comments: [], votes: [], chat: [], admin_tokens: [], announcement: { text: 'Welcome! This is an anonymous forum. Be kind and follow the rules.' }, rules: { text: 'Be respectful. No doxxing. Report abuse.' }, reports: [], reactions: [], polls: [], blocklist: [], audit: [] }
 const db = new Low(adapter, defaultData)
 
 function nowSec() { return Math.floor(Date.now() / 1000) }
@@ -244,7 +244,21 @@ async function pruneChat(ttlSeconds) {
   db.data = db.data || defaultData
   const now = Math.floor(Date.now() / 1000)
   const before = (db.data.chat || []).length
-  db.data.chat = (db.data.chat || []).filter(m => (now - (m.created_at || 0)) < ttlSeconds)
+  // Only prune messages that are older than ttlSeconds AND not pinned by admin
+  const old = (db.data.chat || []).filter(m => ((now - (m.created_at || 0)) >= ttlSeconds) && !m.pinned)
+  db.data.chat = (db.data.chat || []).filter(m => ((now - (m.created_at || 0)) < ttlSeconds) || m.pinned)
+  // remove uploaded files associated with pruned messages (if any)
+  for (const m of old) {
+    try {
+      if (m && m.image) {
+        const fn = path.basename(m.image || '')
+        if (fn) {
+          const p = path.join(__dirname, 'uploads', fn)
+          try { await fsp.unlink(p) } catch (e) { /* ignore */ }
+        }
+      }
+    } catch (e) { console.warn('failed to remove chat uploaded file', e) }
+  }
   const after = db.data.chat.length
   let changed = false
   if (after !== before) {
@@ -368,6 +382,180 @@ async function resolveReport(id) {
   return r
 }
 
+async function deleteReport(id) {
+  await db.read()
+  db.data = db.data || defaultData
+  const exists = (db.data.reports || []).some(x => x.id === id)
+  if (!exists) return { ok: false }
+  db.data.reports = (db.data.reports || []).filter(r => r.id !== id)
+  await safeWrite()
+  return { ok: true }
+}
+
+// Blocklist helpers
+async function getBlocklist() {
+  await db.read()
+  db.data = db.data || defaultData
+  return db.data.blocklist || []
+}
+
+async function setBlocklist(list) {
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.blocklist = Array.isArray(list) ? list.map(x => String(x).toLowerCase()) : []
+  await safeWrite()
+  return db.data.blocklist
+}
+
+// check whether a given text contains any blocked token (simple word-boundary check)
+async function isBlocked(text) {
+  if (!text) return false
+  await db.read()
+  db.data = db.data || defaultData
+  const list = db.data.blocklist || []
+  const lower = String(text).toLowerCase()
+  for (const token of list) {
+    if (!token) continue
+    // treat token as plain substring or a simple word (use word boundaries)
+    try {
+      const re = new RegExp("\\b" + token.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&') + "\\b", 'i')
+      if (re.test(lower)) return true
+    } catch (e) {
+      // fallback substring
+      if (lower.includes(token)) return true
+    }
+  }
+  return false
+}
+
+// Audit log helpers
+async function addAuditEntry(action, details, admin_token) {
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.audit = db.data.audit || []
+  const id = nanoid()
+  const entry = { id, action: action || 'unknown', details: details || {}, admin_token: admin_token || null, created_at: Math.floor(Date.now()/1000) }
+  db.data.audit.push(entry)
+  await safeWrite()
+  return entry
+}
+
+async function listAudit() {
+  await db.read()
+  db.data = db.data || defaultData
+  return (db.data.audit || []).slice().sort((a, b) => b.created_at - a.created_at)
+}
+
+// Reactions helpers: store per-voter reactions; aggregate on read
+async function addReaction(r) {
+  // r: { target_type, target_id, emoji, voter_id }
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.reactions = db.data.reactions || []
+  const target_type = r.target_type
+  const target_id = r.target_id
+  const emoji = String(r.emoji || '')
+  const voter = r.voter_id || null
+  if (!target_type || !target_id || !emoji) return null
+  // enforce one reaction per voter per emoji per target (toggle)
+  if (voter) {
+    const existing = (db.data.reactions || []).find(x => x.target_type === target_type && x.target_id === target_id && x.emoji === emoji && x.voter_id === voter)
+    if (existing) {
+      // remove (toggle off)
+      db.data.reactions = (db.data.reactions || []).filter(x => x !== existing)
+      await safeWrite()
+      return await getReactionsForTarget(target_type, target_id)
+    }
+  }
+  const id = nanoid()
+  const created_at = Math.floor(Date.now()/1000)
+  db.data.reactions.push({ id, target_type, target_id, emoji, voter_id: voter, created_at })
+  await safeWrite()
+  return await getReactionsForTarget(target_type, target_id)
+}
+
+async function getReactionsForTarget(target_type, target_id) {
+  await db.read()
+  db.data = db.data || defaultData
+  const items = (db.data.reactions || []).filter(x => x.target_type === target_type && x.target_id === target_id)
+  const byEmoji = {}
+  for (const it of items) {
+    byEmoji[it.emoji] = byEmoji[it.emoji] || { count: 0, voters: [] }
+    byEmoji[it.emoji].count++
+    if (it.voter_id) byEmoji[it.emoji].voters.push(it.voter_id)
+  }
+  return byEmoji
+}
+
+// Poll helpers: create poll attached to a thread, vote
+async function createPoll(poll) {
+  // poll: { thread_id, question, options: [label], ends_at (optional timestamp) }
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.polls = db.data.polls || []
+  const id = nanoid()
+  const created_at = Math.floor(Date.now()/1000)
+  const options = (poll.options || []).map((label, idx) => ({ id: nanoid(), label: String(label || ''), votes: 0 }))
+  const p = { id, thread_id: poll.thread_id || null, question: String(poll.question || ''), options, created_at, ends_at: poll.ends_at || null }
+  db.data.polls.push(p)
+  await safeWrite()
+  return p
+}
+
+async function getPoll(id) {
+  await db.read()
+  db.data = db.data || defaultData
+  return (db.data.polls || []).find(x => x.id === id) || null
+}
+
+async function getPollsForThread(thread_id) {
+  await db.read()
+  db.data = db.data || defaultData
+  return (db.data.polls || []).filter(x => x.thread_id === thread_id)
+}
+
+async function votePoll(pollId, optionId, voter_id) {
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.polls = db.data.polls || []
+  db.data.poll_votes = db.data.poll_votes || []
+  const p = (db.data.polls || []).find(x => x.id === pollId)
+  if (!p) return null
+  // prevent double-voting by same voter: remove any prior vote
+  if (voter_id) {
+    db.data.poll_votes = (db.data.poll_votes || []).filter(v => !(v.poll_id === pollId && v.voter_id === voter_id))
+  }
+  // record vote
+  const vid = nanoid()
+  db.data.poll_votes.push({ id: vid, poll_id: pollId, option_id: optionId, voter_id: voter_id || null, created_at: Math.floor(Date.now()/1000) })
+  // recompute option vote counts
+  for (const opt of (p.options || [])) {
+    opt.votes = (db.data.poll_votes || []).filter(v => v.poll_id === pollId && v.option_id === opt.id).length
+  }
+  await safeWrite()
+  return p
+}
+
+// Modified report resolution: resolve one report and remove other reports targeting the same object
+async function resolveReport(id) {
+  await db.read()
+  db.data = db.data || defaultData
+  const r = (db.data.reports || []).find(x => x.id === id)
+  if (!r) return null
+  r.resolved = true
+  r.resolved_at = Math.floor(Date.now()/1000)
+  // remove other reports for same target (collapse duplicates)
+  const others = (db.data.reports || []).filter(x => x.id !== id && x.target_type === r.target_type && x.target_id === r.target_id)
+  const removedIds = others.map(x => x.id)
+  if (removedIds.length > 0) {
+    db.data.reports = (db.data.reports || []).filter(x => !removedIds.includes(x.id) && x.id !== id)
+    // keep the resolved one in the list
+    db.data.reports.push(r)
+  }
+  await safeWrite()
+  return { resolved: r, removed: removedIds }
+}
+
 async function getChatMessages(limit = 200) {
   await db.read()
   const all = db.data.chat || []
@@ -378,9 +566,66 @@ async function addChatMessage(msg) {
   await db.read()
   db.data = db.data || defaultData
   db.data.chat = db.data.chat || []
+  // ensure pinned flag defaults to false when adding
+  if (msg) msg.pinned = !!msg.pinned
+  // enforce blocklist: throw when message text contains blocked tokens
+  if (msg && typeof msg.text === 'string') {
+    const blocked = await isBlocked(msg.text)
+    if (blocked) throw new Error('blocked_content')
+  }
   db.data.chat.push(msg)
   await safeWrite()
   return msg
 }
 
-module.exports = { init, getThreads, searchThreads, createThread, getThreadWithComments, createComment, addVote, getChatMessages, addChatMessage, pruneChat, addAdminToken, hasAdminToken, deleteThreadById, getAnnouncement, setAnnouncement, getRules, setRules, createReport, listReports, resolveReport }
+// set pinned flag for a chat message by id
+async function setChatPinned(id, pinned) {
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.chat = db.data.chat || []
+  const m = (db.data.chat || []).find(x => x.id === id)
+  if (!m) return null
+  m.pinned = !!pinned
+  await safeWrite()
+  return m
+}
+
+module.exports = {
+  init,
+  getThreads,
+  searchThreads,
+  createThread,
+  getThreadWithComments,
+  createComment,
+  addVote,
+  getChatMessages,
+  addChatMessage,
+  pruneChat,
+  setChatPinned,
+  addAdminToken,
+  hasAdminToken,
+  deleteThreadById,
+  getAnnouncement,
+  setAnnouncement,
+  getRules,
+  setRules,
+  createReport,
+  listReports,
+  resolveReport,
+  deleteReport,
+  // blocklist
+  getBlocklist,
+  setBlocklist,
+  isBlocked,
+  // audit
+  addAuditEntry,
+  listAudit,
+  // reactions
+  addReaction,
+  getReactionsForTarget,
+  // polls
+  createPoll,
+  getPoll,
+  votePoll,
+  getPollsForThread
+}

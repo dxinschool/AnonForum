@@ -3,13 +3,25 @@ let socket = null
 const subscribers = new Set()
 let reconnectTimer = null
 let reconnectDelay = 1000
+let outgoingQueue = []
 
 function ensureSocket() {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return socket
   const loc = window.location
   const protocol = loc.protocol === 'https:' ? 'wss' : 'ws'
   socket = new WebSocket(`${protocol}://${loc.host}/ws`)
-  socket.addEventListener('open', () => console.log('shared ws open'))
+  socket.addEventListener('open', () => {
+    console.log('shared ws open')
+    // flush any queued outgoing messages
+    try {
+      while (outgoingQueue.length && socket && socket.readyState === WebSocket.OPEN) {
+        const item = outgoingQueue.shift()
+        try { socket.send(item) } catch (e) { console.warn('failed sending queued ws item', e); break }
+      }
+    } catch (e) { console.warn('flush queue failed', e) }
+    // reset reconnect delay on successful open
+    reconnectDelay = 1000
+  })
   socket.addEventListener('error', (e) => {
     console.warn('shared ws error', e)
   })
@@ -40,9 +52,17 @@ export function subscribe(fn) {
 }
 
 export function send(obj) {
+  const s = JSON.stringify(obj)
   ensureSocket()
   try {
-    socket.send(JSON.stringify(obj))
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(s)
+    } else {
+      // queue until open
+      outgoingQueue.push(s)
+      // cap queue to avoid memory blowup
+      if (outgoingQueue.length > 200) outgoingQueue.splice(0, outgoingQueue.length - 200)
+    }
   } catch (err) {
     console.warn('ws send failed', err)
   }

@@ -23,8 +23,8 @@ export default function Announcement() {
   const text = typeof ann === 'string' ? ann : ann.text
   if (!text) return null
   return (
-    <div style={{ background: '#fff3cd', border: '1px solid #ffeeba', padding: 10, marginBottom: 12, borderRadius: 6 }}>
-      <span style={{ marginLeft: 8 }}>{text}</span>
+    <div className="notice announcement">
+      <span className="notice-body">{text}</span>
     </div>
   )
 }

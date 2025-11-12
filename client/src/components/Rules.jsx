@@ -13,9 +13,9 @@ export default function Rules() {
 
   if (!rules || !rules.text) return null
   return (
-    <div style={{ background: '#e9f7ef', border: '1px solid #d4edda', padding: 10, marginBottom: 12, borderRadius: 6 }}>
+    <div className="notice rules">
       <strong>Community rules:</strong>
-      <div style={{ marginTop: 6 }}>{rules.text}</div>
+      <div className="notice-body">{rules.text}</div>
     </div>
   )
 }

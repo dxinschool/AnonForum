@@ -16,6 +16,17 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, body, tags })
     });
+    const ct = (res.headers.get('content-type') || '').toLowerCase()
+    if (!res.ok) {
+      try {
+        if (ct.includes('application/json')) {
+          const j = await res.json()
+          throw new Error((j && (j.error || j.message)) ? (j.error || j.message) : JSON.stringify(j))
+        }
+        const t = await res.text()
+        throw new Error(t || 'create thread failed')
+      } catch (e) { throw e }
+    }
     return res.json();
   },
   // createThread with optional file: if `file` is provided, pass FormData as { title, body, image }
@@ -29,6 +40,17 @@ const API = {
       method: 'POST',
       body: fd
     })
+    const ct = (res.headers.get('content-type') || '').toLowerCase()
+    if (!res.ok) {
+      try {
+        if (ct.includes('application/json')) {
+          const j = await res.json()
+          throw new Error((j && (j.error || j.message)) ? (j.error || j.message) : JSON.stringify(j))
+        }
+        const t = await res.text()
+        throw new Error(t || 'create thread failed')
+      } catch (e) { throw e }
+    }
     return res.json()
   },
   getThread: async (id) => {
@@ -98,6 +120,26 @@ const API = {
     const res = await fetch(`/api/admin/reports/${id}/resolve`, { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {} })
     return res.json()
   },
+  deleteReport: async (id) => {
+    const token = localStorage.getItem('admin_token')
+    const res = await fetch(`/api/admin/reports/${id}`, { method: 'DELETE', headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    // Some servers return 204 No Content or plain text on delete — handle non-JSON safely
+    if (res.status === 204) return {}
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('application/json')) return res.json()
+    const txt = await res.text()
+    try { return JSON.parse(txt) } catch (e) { return txt }
+  },
+  // admin: pin/unpin chat message
+  adminPinChat: async (id, pinned) => {
+    const token = localStorage.getItem('admin_token')
+    const res = await fetch(`/api/admin/chat/${encodeURIComponent(id)}/pin`, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}),
+      body: JSON.stringify({ pinned: !!pinned })
+    })
+    return res.json()
+  },
   deleteThread: async (id) => {
     const token = localStorage.getItem('admin_token')
     const res = await fetch(`/api/threads/${id}`, {
@@ -119,6 +161,75 @@ const API = {
       body: JSON.stringify({ target_type, target_id, vote, voter_id: voter })
     });
     return res.json();
+  }
+  ,
+  // reactions
+  getReactions: async (target_type, target_id) => {
+    const params = new URLSearchParams()
+    params.set('target_type', target_type)
+    params.set('target_id', target_id)
+    const res = await fetch('/api/reactions?' + params.toString())
+    return res.json()
+  },
+  addReaction: async (target_type, target_id, emoji, voter_id) => {
+    const res = await fetch('/api/reactions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_type, target_id, emoji, voter_id })
+    })
+    // handle non-JSON or empty responses gracefully to avoid JSON.parse errors
+    const ct = (res.headers.get('content-type') || '').toLowerCase()
+    if (!res.ok) {
+      // try to parse error body if JSON, otherwise throw text
+      try {
+        if (ct.includes('application/json')) {
+          const j = await res.json()
+          throw new Error(j && j.error ? j.error : JSON.stringify(j))
+        }
+        const t = await res.text()
+        throw new Error(t || 'reaction failed')
+      } catch (e) { throw e }
+    }
+    try {
+      if (ct.includes('application/json')) return await res.json()
+      const txt = await res.text()
+      try { return JSON.parse(txt) } catch (e) { return {} }
+    } catch (e) {
+      console.warn('addReaction parse failed', e)
+      return {}
+    }
+  },
+  // polls
+  createPoll: async (thread_id, question, options, ends_at) => {
+    const res = await fetch('/api/polls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id, question, options, ends_at }) })
+    return res.json()
+  },
+  getPoll: async (id) => {
+    const res = await fetch('/api/polls/' + encodeURIComponent(id))
+    return res.json()
+  },
+  listPollsForThread: async (threadId) => {
+    const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}/polls`)
+    return res.json()
+  },
+  votePoll: async (pollId, option_id, voter_id) => {
+    const res = await fetch(`/api/polls/${encodeURIComponent(pollId)}/vote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ option_id, voter_id }) })
+    return res.json()
+  },
+  // admin blocklist & audit
+  adminGetBlocklist: async () => {
+    const token = localStorage.getItem('admin_token')
+    const res = await fetch('/api/admin/blocklist', { headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    return res.json()
+  },
+  adminSetBlocklist: async (list) => {
+    const token = localStorage.getItem('admin_token')
+    const res = await fetch('/api/admin/blocklist', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}), body: JSON.stringify({ list }) })
+    return res.json()
+  },
+  adminListAudit: async () => {
+    const token = localStorage.getItem('admin_token')
+    const res = await fetch('/api/admin/audit', { headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    return res.json()
   }
 }
 
