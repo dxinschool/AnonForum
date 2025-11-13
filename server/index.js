@@ -700,6 +700,23 @@ httpServer.listen(PORT, () => {
   console.log(`Forum server listening on ${PORT}`);
 });
 
+// Serve client SPA when a production build exists at ../client/dist
+try {
+  const clientDist = path.join(__dirname, '..', 'client', 'dist')
+  if (fs.existsSync(clientDist)) {
+    console.log('Serving client from', clientDist)
+    app.use(express.static(clientDist))
+    // For any non-API route, return index.html so the SPA router can handle it
+    app.get('*', (req, res, next) => {
+      const p = req.path || ''
+      if (p.startsWith('/api') || p.startsWith('/uploads') || p.startsWith('/ws') || p.startsWith('/oembed')) return next()
+      res.sendFile(path.join(clientDist, 'index.html'))
+    })
+  }
+} catch (e) {
+  console.warn('checking client dist failed', e)
+}
+
 // Chat pruning: remove messages older than 5 minutes every 60 seconds
 const CHAT_TTL_SECONDS = 60 * 5 // 5 minutes
 setInterval(async () => {
