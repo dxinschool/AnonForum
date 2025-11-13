@@ -143,6 +143,11 @@ export default function AdminPanel() {
     } catch (e) { console.warn('copy failed', e); toast.show('Copy failed') }
   }
 
+  // normalize audit to an array shape for rendering
+  const auditList = Array.isArray(audit)
+    ? audit
+    : (audit && audit.items && Array.isArray(audit.items) ? audit.items : [])
+
   if (token) return (
     <div style={{ marginBottom: 12 }}>
       <strong>Admin:</strong> <small style={{ color: '#28a745' }}>logged in</small>
@@ -185,7 +190,7 @@ export default function AdminPanel() {
               <div style={{ marginBottom: 8 }}>
                 <button className="btn small" onClick={refreshAudit}>Refresh</button>
               </div>
-              {(audit || []).slice(0,50).map(a => (
+              {auditList.slice(0, 50).map(a => (
                 <div key={a.id} className="audit-row">
                   <div className="audit-action">{a.action} <small className="muted-small">{a.admin_token ? 'admin' : ''}</small></div>
                   <div className="audit-time">{new Date((a.ts || a.created_at || Math.floor(Date.now()/1000)) * 1000).toLocaleString()}</div>
