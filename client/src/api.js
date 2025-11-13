@@ -1,3 +1,18 @@
+// Allow overriding the API base at build time with Vite env var VITE_API_BASE.
+// If not provided, client will use same-origin relative paths (empty base).
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) ? String(import.meta.env.VITE_API_BASE).replace(/\/$/, '') : ''
+
+function apiUrl(path) {
+  if (!path) return API_BASE || path
+  if (!API_BASE) return path
+  // ensure single slash between base and path
+  return API_BASE.replace(/\/$/, '') + (path.startsWith('/') ? path : '/' + path)
+}
+
+function apiFetch(path, opts) {
+  return fetch(apiUrl(path), opts)
+}
+
 const API = {
   // optional `q` string to search threads (server-side). Supports pagination via page and perPage.
   // Returns an object: { items: [...], total, page, per_page, total_pages }
@@ -7,11 +22,11 @@ const API = {
     if (page) params.set('page', String(page))
     if (perPage) params.set('per_page', String(perPage))
     const url = '/api/threads?' + params.toString()
-    const res = await fetch(url)
+    const res = await apiFetch(url)
     return res.json()
   },
   createThread: async (title, body, tags) => {
-    const res = await fetch('/api/threads', {
+    const res = await apiFetch('/api/threads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, body, tags })
@@ -36,7 +51,7 @@ const API = {
     fd.append('body', body)
     if (tags) fd.append('tags', Array.isArray(tags) ? JSON.stringify(tags) : String(tags))
     fd.append('image', file)
-    const res = await fetch('/api/threads', {
+    const res = await apiFetch('/api/threads', {
       method: 'POST',
       body: fd
     })
@@ -54,11 +69,11 @@ const API = {
     return res.json()
   },
   getThread: async (id) => {
-    const res = await fetch(`/api/threads/${id}`);
+    const res = await apiFetch(`/api/threads/${id}`);
     return res.json();
   },
   postComment: async (threadId, parent_id, body) => {
-    const res = await fetch(`/api/threads/${threadId}/comments`, {
+    const res = await apiFetch(`/api/threads/${threadId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ parent_id, body })
@@ -66,7 +81,7 @@ const API = {
     return res.json();
   },
   adminLogin: async (password) => {
-    const res = await fetch('/api/admin/login', {
+    const res = await apiFetch('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password })
@@ -75,7 +90,7 @@ const API = {
   },
   adminAnnounce: async (text) => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch('/api/admin/announce', {
+    const res = await apiFetch('/api/admin/announce', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}),
       body: JSON.stringify({ text })
@@ -83,17 +98,17 @@ const API = {
     return res.json()
   },
   getAnnouncement: async () => {
-    const res = await fetch('/api/announcement')
+    const res = await apiFetch('/api/announcement')
     return res.json()
   },
   // rules
   getRules: async () => {
-    const res = await fetch('/api/rules')
+    const res = await apiFetch('/api/rules')
     return res.json()
   },
   adminSetRules: async (text) => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch('/api/admin/rules', {
+    const res = await apiFetch('/api/admin/rules', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}),
       body: JSON.stringify({ text })
@@ -102,7 +117,7 @@ const API = {
   },
   // reporting
   report: async (target_type, target_id, reason) => {
-    const res = await fetch('/api/report', {
+    const res = await apiFetch('/api/report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target_type, target_id, reason })
@@ -112,17 +127,17 @@ const API = {
   // admin report actions
   listReports: async () => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch('/api/admin/reports', { headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    const res = await apiFetch('/api/admin/reports', { headers: token ? { Authorization: 'Bearer ' + token } : {} })
     return res.json()
   },
   resolveReport: async (id) => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch(`/api/admin/reports/${id}/resolve`, { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    const res = await apiFetch(`/api/admin/reports/${id}/resolve`, { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {} })
     return res.json()
   },
   deleteReport: async (id) => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch(`/api/admin/reports/${id}`, { method: 'DELETE', headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    const res = await apiFetch(`/api/admin/reports/${id}`, { method: 'DELETE', headers: token ? { Authorization: 'Bearer ' + token } : {} })
     // Some servers return 204 No Content or plain text on delete — handle non-JSON safely
     if (res.status === 204) return {}
     const ct = res.headers.get('content-type') || ''
@@ -133,7 +148,7 @@ const API = {
   // admin: pin/unpin chat message
   adminPinChat: async (id, pinned) => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch(`/api/admin/chat/${encodeURIComponent(id)}/pin`, {
+    const res = await apiFetch(`/api/admin/chat/${encodeURIComponent(id)}/pin`, {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}),
       body: JSON.stringify({ pinned: !!pinned })
@@ -142,7 +157,7 @@ const API = {
   },
   deleteThread: async (id) => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch(`/api/threads/${id}`, {
+    const res = await apiFetch(`/api/threads/${id}`, {
       method: 'DELETE',
       headers: token ? { 'Authorization': 'Bearer ' + token } : {}
     })
@@ -155,7 +170,7 @@ const API = {
       voter = 'anon_' + Math.random().toString(36).slice(2, 10)
       try { localStorage.setItem('anon_id', voter) } catch (e) { /* ignore */ }
     }
-    const res = await fetch('/api/vote', {
+    const res = await apiFetch('/api/vote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target_type, target_id, vote, voter_id: voter })
@@ -168,11 +183,11 @@ const API = {
     const params = new URLSearchParams()
     params.set('target_type', target_type)
     params.set('target_id', target_id)
-    const res = await fetch('/api/reactions?' + params.toString())
+    const res = await apiFetch('/api/reactions?' + params.toString())
     return res.json()
   },
   addReaction: async (target_type, target_id, emoji, voter_id) => {
-    const res = await fetch('/api/reactions', {
+    const res = await apiFetch('/api/reactions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target_type, target_id, emoji, voter_id })
     })
@@ -200,35 +215,35 @@ const API = {
   },
   // polls
   createPoll: async (thread_id, question, options, ends_at) => {
-    const res = await fetch('/api/polls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id, question, options, ends_at }) })
+    const res = await apiFetch('/api/polls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id, question, options, ends_at }) })
     return res.json()
   },
   getPoll: async (id) => {
-    const res = await fetch('/api/polls/' + encodeURIComponent(id))
+    const res = await apiFetch('/api/polls/' + encodeURIComponent(id))
     return res.json()
   },
   listPollsForThread: async (threadId) => {
-    const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}/polls`)
+    const res = await apiFetch(`/api/threads/${encodeURIComponent(threadId)}/polls`)
     return res.json()
   },
   votePoll: async (pollId, option_id, voter_id) => {
-    const res = await fetch(`/api/polls/${encodeURIComponent(pollId)}/vote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ option_id, voter_id }) })
+    const res = await apiFetch(`/api/polls/${encodeURIComponent(pollId)}/vote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ option_id, voter_id }) })
     return res.json()
   },
   // admin blocklist & audit
   adminGetBlocklist: async () => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch('/api/admin/blocklist', { headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    const res = await apiFetch('/api/admin/blocklist', { headers: token ? { Authorization: 'Bearer ' + token } : {} })
     return res.json()
   },
   adminSetBlocklist: async (list) => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch('/api/admin/blocklist', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}), body: JSON.stringify({ list }) })
+    const res = await apiFetch('/api/admin/blocklist', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}), body: JSON.stringify({ list }) })
     return res.json()
   },
   adminListAudit: async () => {
     const token = localStorage.getItem('admin_token')
-    const res = await fetch('/api/admin/audit', { headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    const res = await apiFetch('/api/admin/audit', { headers: token ? { Authorization: 'Bearer ' + token } : {} })
     return res.json()
   }
 }
