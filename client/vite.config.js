@@ -13,13 +13,13 @@ export default defineConfig({
       protocol: 'wss'
     },
     proxy: {
-      '/api': 'http://localhost:4000',
+      '/api': 'http://localhost:10000',
       // serve uploaded images through the dev proxy so /uploads/* is forwarded to backend
       '/uploads': 'http://localhost:4000',
       // proxy raw websocket endpoint used by the backend (/ws). Use explicit ws:// target
       // and add error handler to avoid noisy ECONNRESET traces when clients disconnect.
       '/ws': {
-        target: 'ws://localhost:4000',
+        target: 'ws://localhost:10000',
         ws: true,
         changeOrigin: true,
         secure: false,
