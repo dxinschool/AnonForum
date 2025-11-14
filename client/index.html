@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Anonymous Forum</title>
+    <!-- Inform UA about supported color schemes -->
+    <meta name="color-scheme" content="dark light">
+    <!-- Apply saved theme (or system preference) synchronously to avoid a flash of wrong theme -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme'); // 'light'|'dark'|'system'|null
+          var theme = saved || 'system';
+          if (theme === 'system') {
+            var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            theme = prefersDark ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          /* ignore localStorage errors (e.g. privacy mode) */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
