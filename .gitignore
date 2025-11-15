@@ -1,0 +1,16 @@
+# Node modules
+node_modules/
+client/node_modules/
+
+# Local database (do not track uploads or runtime DB)
+server/db.json
+
+# Build / OS artifacts
+dist/
+.DS_Store
+
+# Environment files
+.env
+
+# VS Code
+.vscode/
