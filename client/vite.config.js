@@ -9,17 +9,21 @@ export default defineConfig({
     port: 5173,
     // Improve HMR and websocket behavior for dev tunnels by preferring secure WS and
     // accepting connections from external hosts. This helps when using VS Code dev tunnels.
+    // Use plain ws for local development to avoid wss failures when not using HTTPS.
+    // If you intentionally run the dev server over HTTPS (with a valid cert),
+    // change this to { protocol: 'wss' } or set via env.
     hmr: {
-      protocol: 'wss'
+      protocol: 'ws'
     },
     proxy: {
-      '/api': 'http://localhost:10000',
+      // proxy application API requests to the backend server (port 4000)
+      '/api': 'http://localhost:4000',
       // serve uploaded images through the dev proxy so /uploads/* is forwarded to backend
       '/uploads': 'http://localhost:4000',
       // proxy raw websocket endpoint used by the backend (/ws). Use explicit ws:// target
       // and add error handler to avoid noisy ECONNRESET traces when clients disconnect.
       '/ws': {
-        target: 'ws://localhost:10000',
+        target: 'ws://localhost:4000',
         ws: true,
         changeOrigin: true,
         secure: false,

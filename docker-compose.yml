@@ -1,0 +1,19 @@
+services:
+  server:
+    build: ./server
+    container_name: forum_server
+    ports:
+      - "4274:4274"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ./server/uploads:/usr/src/app/uploads
+
+  client:
+    build: ./client
+    container_name: forum_client
+    ports:
+      - "4273:80"
+    depends_on:
+      - server
+

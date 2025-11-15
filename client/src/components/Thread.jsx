@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react'
 import API from '../api'
 import { subscribe } from '../ws'
+import admin from '../admin'
+import Modal from './Modal'
 import { timeAgo } from '../time'
 import { getVote, setVote } from '../voteLocal'
 import toast from '../toast'
 import ImageLightbox from './ImageLightbox'
 
-function Comment({ c, onReply }) {
+function Comment({ c, onReply, onEdit, isAdmin }) {
   return (
     <div className="comment">
       <div style={{ fontSize: 12, color: '#555' }}><small>score: {c.score}</small> — <small>{timeAgo(c.created_at)}</small></div>
       <div style={{ marginTop: 6 }}>{c.body}</div>
-      <div style={{ marginTop: 6 }}>
+      <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
         <button className="btn" onClick={() => onReply(c.id)}>Reply</button>
+        {isAdmin && <button className="btn secondary" onClick={() => onEdit(c)}>Edit</button>}
       </div>
     </div>
   )
@@ -55,6 +58,14 @@ export default function Thread({ threadId }) {
           setReactions(d.reactions || {})
         }
       }
+      if (msg.type === 'thread_updated') {
+        const t = msg.data
+        if (t && t.id === threadId) setData(prev => prev ? { thread: { ...prev.thread, ...t }, comments: prev.comments } : { thread: t, comments: [] })
+      }
+      if (msg.type === 'comment_updated') {
+        const c = msg.data
+        if (c && c.thread_id === threadId) setData(prev => prev ? { thread: prev.thread, comments: prev.comments.map(x => x.id === c.id ? c : x) } : prev)
+      }
     })
     return () => unsub()
   }, [threadId])
@@ -65,10 +76,24 @@ export default function Thread({ threadId }) {
   const [polls, setPolls] = useState([])
   // share modal removed — clicking Share now copies permalink to clipboard
   const [shareCopied, setShareCopied] = useState(false)
+  const [idCopied, setIdCopied] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editBody, setEditBody] = useState('')
+  const [editTags, setEditTags] = useState('')
+  const [adminToken, setAdminToken] = useState(() => admin.getToken())
+
+  useEffect(() => {
+    const unsub = admin.subscribe(t => setAdminToken(t))
+    return unsub
+  }, [])
 
   useEffect(() => {
     setMyVote(getVote(threadId))
   }, [threadId])
+
+  const [editingComment, setEditingComment] = useState(null)
+  const [editCommentBody, setEditCommentBody] = useState('')
 
   const votePoll = async (pollId, optionId) => {
     try {
@@ -113,8 +138,18 @@ export default function Thread({ threadId }) {
             <img src={data.thread.image} alt="thread" style={{ maxWidth: '100%', maxHeight: 480, borderRadius: 6, cursor: 'pointer' }} onClick={() => { setPreviewSrc(data.thread.image); setPreviewOpen(true) }} />
           </div>
         )}
+        {data.thread.video && (
+          <div style={{ marginBottom: 12 }}>
+            <video controls src={data.thread.video} style={{ width: '100%', maxWidth: 900, borderRadius: 6 }} />
+          </div>
+        )}
+        {data.thread.audio && (
+          <div style={{ marginBottom: 12 }}>
+            <audio controls src={data.thread.audio} style={{ width: '100%', maxWidth: 640 }} />
+          </div>
+        )}
         <p>{data.thread.body}</p>
-        <div className="btn-group" style={{ marginTop: 8 }}>
+        <div className="btn-group">
           <button className="btn" onClick={async () => {
             try {
               const text = (data.thread.title || '') + '\n\n' + (data.thread.body || '')
@@ -122,6 +157,14 @@ export default function Thread({ threadId }) {
               toast.show('Copied to clipboard')
             } catch (e) { console.warn('copy failed', e); toast.show('Copy failed') }
           }}>Copy</button>
+          <button className="btn ghost" onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(String(data.thread.id))
+              setIdCopied(true)
+              toast.show('ID copied')
+              setTimeout(() => setIdCopied(false), 1500)
+            } catch (e) { console.warn('copy id failed', e); toast.show('Copy failed') }
+          }}>{idCopied ? 'Copied!' : 'Copy ID'}</button>
           <button className="btn ghost" onClick={async () => {
             try {
               // include the thread query so opening the share URL both provides the /t/:id preview
@@ -133,8 +176,8 @@ export default function Thread({ threadId }) {
               setTimeout(() => setShareCopied(false), 1500)
             } catch (e) { console.warn('copy failed', e); toast.show('Copy failed') }
           }}>{shareCopied ? 'Copied!' : 'Share'}</button>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="thread-actions">
+            <div className="vote-wrap">
               <button className="btn" onClick={async () => {
                 try {
                   const cur = getVote(data.thread.id)
@@ -154,9 +197,9 @@ export default function Thread({ threadId }) {
                 } catch (err) { console.warn('vote failed', err) }
               }} style={{ background: myVote === -1 ? '#dc3545' : undefined, color: myVote === -1 ? '#fff' : undefined }}>▼</button>
             </div>
-            <div><small>score: {data.thread.score}</small> — <small>{timeAgo(data.thread.created_at)}</small></div>
+            <div className="meta-info"><small>score: {data.thread.score}</small> — <small>{timeAgo(data.thread.created_at)}</small></div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 12 }}>
+          <div className="reaction-bar" style={{ marginLeft: 12 }}>
             {/* Simple reaction button set */}
             {['👍','❤️','😂','😮','😢','😡'].map(emo => (
               <button key={emo} className="btn" onClick={async () => {
@@ -171,6 +214,16 @@ export default function Thread({ threadId }) {
             ))}
           </div>
         </div>
+        {adminToken && (
+          <div style={{ marginTop: 8 }}>
+            <button className="btn secondary" onClick={() => {
+              setEditTitle(data.thread.title || '')
+              setEditBody(data.thread.body || '')
+              setEditTags((data.thread.tags || []).join(', '))
+              setIsEditOpen(true)
+            }}>Edit Thread</button>
+          </div>
+        )}
         {/* Polls (show first poll if any) */}
         {polls && polls.length > 0 && (
           <div style={{ marginTop: 12 }}>
@@ -213,7 +266,7 @@ export default function Thread({ threadId }) {
       <h3>Comments</h3>
       <div>
         {data.comments.map(c => (
-          <Comment key={c.id} c={c} onReply={(id) => setReplyTo(id)} />
+          <Comment key={c.id} c={c} onReply={(id) => setReplyTo(id)} onEdit={(comment) => { setEditingComment(comment); setEditCommentBody(comment.body || '') }} isAdmin={!!adminToken} />
         ))}
       </div>
 
@@ -224,6 +277,39 @@ export default function Thread({ threadId }) {
       </form>
     </div>
   <ImageLightbox isOpen={previewOpen} src={previewSrc} onClose={() => setPreviewOpen(false)} />
+  <Modal isOpen={isEditOpen} title="Edit thread" onCancel={() => setIsEditOpen(false)} onConfirm={async () => {
+    try {
+      const updates = { title: editTitle, body: editBody, tags: editTags }
+      const updated = await API.adminEditThread(data.thread.id, updates)
+      if (updated) {
+        setData(prev => prev ? { thread: { ...prev.thread, ...updated }, comments: prev.comments } : { thread: updated, comments: [] })
+        toast.show('Thread updated')
+      }
+    } catch (e) { console.warn('edit failed', e); toast.show('Edit failed') }
+    setIsEditOpen(false)
+  }} confirmText="Save" cancelText="Cancel">
+    <div>
+      <input className="input" value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Title" />
+      <textarea className="input" rows={6} value={editBody} onChange={e => setEditBody(e.target.value)} />
+      <input className="input" value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="tags comma separated" />
+      <div style={{ marginTop: 6 }}><small>Leave fields unchanged to keep current values.</small></div>
+    </div>
+  </Modal>
+  <Modal isOpen={!!editingComment} title="Edit comment" onCancel={() => setEditingComment(null)} onConfirm={async () => {
+    try {
+      if (!editingComment) return
+      const updated = await API.adminEditComment(editingComment.id, { body: editCommentBody })
+      if (updated) {
+        setData(prev => prev ? { thread: prev.thread, comments: prev.comments.map(x => x.id === updated.id ? updated : x) } : prev)
+        toast.show('Comment updated')
+      }
+    } catch (e) { console.warn('edit comment failed', e); toast.show('Edit failed') }
+    setEditingComment(null)
+  }} confirmText="Save" cancelText="Cancel">
+    <div>
+      <textarea className="input" rows={6} value={editCommentBody} onChange={e => setEditCommentBody(e.target.value)} />
+    </div>
+  </Modal>
     </>
   )
 }

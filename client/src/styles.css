@@ -82,7 +82,32 @@ h1{ margin: 0 0 14px 0; font-weight:700; letter-spacing:-0.5px }
 
 .card, .thread { background: var(--card); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 14px; transition: transform .18s ease, box-shadow .18s ease; }
 .card:hover, .thread:hover{ transform: translateY(-3px); box-shadow: 0 10px 30px rgba(2,6,23,0.08); }
-.thread h3, .thread h2 { margin: 0 0 8px 0; }
+.thread { min-width: 0; }
+.thread h3, .thread h2 { margin: 0 0 8px 0; /* ensure long titles wrap instead of overflowing */
+	white-space: normal; /* allow wrapping */
+	overflow-wrap: anywhere; /* break long words/URLs */
+	word-break: break-word; /* fallback hard-break for very long strings */
+}
+
+/* Truncate long titles on thread list page (single-line ellipsis) */
+.thread-title{
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: block;
+	max-width: 100%;
+}
+
+/* Truncate thread body preview to ~3 lines on list page */
+.thread-body{
+	display: -webkit-box;
+	-webkit-line-clamp: 3; /* limit to 3 lines */
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	margin: 0 0 8px 0;
+	color: var(--muted);
+}
 
 .btn{ display:inline-flex; align-items:center; gap:8px; padding:8px 12px; background:var(--accent); color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; transition: transform .12s ease, box-shadow .12s ease, opacity .12s; }
 .btn:hover{ transform: translateY(-2px); box-shadow: 0 6px 18px rgba(37,99,235,0.18); }
@@ -228,7 +253,128 @@ h1{ margin: 0 0 14px 0; font-weight:700; letter-spacing:-0.5px }
 .muted{ color:var(--muted) }
 
 /* responsive */
-@media (max-width:640px){ .container{ padding:12px } .btn{ padding:8px 10px } }
+@media (max-width:720px){
+	/* Make header controls flow below the title instead of absolutely positioned */
+	.container > .app-header { position: static; }
+	.container > .app-header > .header-actions,
+	.container > .app-header > .mobile-actions { position: static; right: auto; top: auto; flex-wrap:wrap; gap:8px; margin-top:8px; }
+	h1 { font-size: 20px; margin-bottom:8px }
+}
+
+@media (max-width:640px){
+	.container{ padding:12px; max-width: 100%; margin: 12px; }
+	.btn{ padding:8px 10px; font-size:14px }
+	.card, .thread { padding: 12px }
+	.thread h3 { font-size: 16px }
+	/* Allow action button groups to wrap on small screens to avoid overflow */
+	.btn-group{ flex-wrap:wrap }
+	.btn-group > * { margin-top: 6px }
+	/* Reduce chat height so it fits better on small viewports */
+	.chat-container{ height: 48vh }
+	/* Slightly smaller thumbnails in upload/preview areas */
+	.thumb{ width:56px; height:56px }
+	.chat-preview .thumb{ width:48px; height:48px }
+	/* Ensure modal and animated card fit comfortably */
+	.modal-card{ width: min(92%, 680px) }
+	.animated-card{ max-width: calc(100vw - 24px) }
+	/* Make pagination controls stack comfortably */
+	.pagination{ flex-direction: column; gap:10px }
+	.pagination input[type='number']{ width: 100% }
+}
+
+/* Make audio players responsive and allow file-upload area to wrap */
+audio{ max-width:100%; height: auto }
+.file-upload{ display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+.file-upload .file-name{ max-width: 100% }
+
+/* Tablet adjustments */
+@media (min-width:641px) and (max-width:980px) {
+	.container{ max-width: 720px }
+	.card, .thread { padding: 14px }
+}
+
+/* Header layout and responsive actions */
+.app-header{ position: relative }
+.header-actions{ position: absolute; right: 0; top: 0; display: flex; gap: 8px }
+@media (max-width:720px){
+	.app-header{ display:flex; flex-direction:column; gap:6px }
+	.header-actions{ position: static; flex-wrap:wrap }
+}
+/* Make header use flex layout so hamburger sits beside title on wide screens */
+.app-header{ display:flex; align-items:center; gap:8px; margin-bottom:12px }
+.app-header h1{ margin:0 }
+
+/* Pagination and page input styling */
+.pagination { display:flex; gap:8px; align-items:center }
+.pagination-center{ display:flex; gap:8px; align-items:center }
+.page-label{ margin-right:8px }
+.page-input{ width:72px; padding:8px; border-radius:8px; border:1px solid rgba(15,23,42,0.06) }
+.page-total{ margin-left:12px }
+@media (max-width:640px){
+	.pagination{ flex-direction:column; align-items:stretch }
+	.pagination-center{ width:100%; display:flex; gap:8px; align-items:center; justify-content:space-between }
+	.page-input{ width: 40%; min-width: 96px }
+	.page-total{ margin-left:0 }
+}
+
+/* Thread / list action controls */
+.vote-controls, .thread-actions { display:flex; gap:8px; align-items:center }
+.vote-controls { flex-wrap:wrap }
+.meta-info { margin-left:8px }
+.thread .btn-group { margin-top: 8px }
+.vote-wrap{ display:flex; gap:6px; align-items:center }
+@media (max-width:640px){
+	.meta-info{ margin-left:0 }
+	.vote-controls, .thread-actions { flex-direction:column; align-items:flex-start }
+	.vote-wrap{ flex-direction:row }
+	.btn-group > * { width: auto }
+}
+
+/* Hamburger / mobile menu */
+.hamburger{ display:none; background:transparent; border:1px solid rgba(0,0,0,0.06); padding:6px 8px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; color:var(--text); border-color:var(--border); background:transparent }
+.mobile-actions{ display:none }
+.mobile-actions.open{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px }
+@media (max-width:720px){
+	.hamburger{ display:inline-flex; width:40px; height:40px; padding:0; border-radius:8px }
+	/* hide the desktop header actions on small screens (we show mobile-actions instead) */
+	.header-actions{ display:none }
+	.mobile-actions{ display:none }
+	.mobile-actions.open{ display:flex }
+}
+
+/* Dark-mode hamburger colors */
+[data-theme='dark'] .hamburger{ color:var(--text); border-color: rgba(255,255,255,0.06); background: rgba(255,255,255,0.02) }
+
+/* Make the hamburger visually square and centered */
+.hamburger{ width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center }
+
+/* Admin panel button sizing tweaks for small screens */
+@media (max-width:720px){
+	.admin-panel .btn, .admin-panel .btn.small, .admin-controls .btn, .admin-controls .btn.small { padding:6px 8px; font-size:13px }
+	.admin-panel .btn, .admin-controls .btn { border-radius:8px }
+	.admin-panel textarea.input, .admin-controls textarea.input{ font-size:14px }
+}
+
+/* Vote buttons: keep side-by-side and place left/right where possible */
+.vote-wrap > .btn{ padding:6px 8px; min-width:40px; display:inline-flex; justify-content:center }
+@media (max-width:640px){
+	/* Ensure vote buttons remain on the same row and don't stack vertically */
+	.vote-controls { flex-direction:row; width:100%; justify-content:space-between; align-items:center }
+	.vote-wrap { order: 0 }
+	.meta-info { order: 1; text-align:center; flex:1 }
+	.vote-wrap > .btn { flex: 0 0 auto }
+}
+
+/* Admin login spacing to avoid overlap with modal close button */
+.admin-login .input{ margin-top:12px }
+
+/* Reaction bar: allow wrapping on small screens */
+.reaction-bar{ display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+.reaction-bar .emoji-btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px }
+@media (max-width:640px){
+	.reaction-bar{ gap:6px }
+	.reaction-bar .emoji-btn{ padding:6px 8px; font-size:15px }
+}
 
 /* file upload button */
 .file-upload input[type="file"]{ display: none; }
@@ -243,8 +389,11 @@ form .btn{ margin-top:10px }
 
 /* (legacy) controls and vote layout were reverted to inline styles in components */
 
-/* Ensure button groups stay on the same line and don't wrap */
-.btn-group{ display:flex; gap:8px; align-items:center; flex-wrap:nowrap; white-space:nowrap }
+/* Button groups - allow wrapping on small screens, keep inline on wider viewports */
+.btn-group{ display:flex; gap:8px; align-items:center }
+@media (min-width:641px){
+	.btn-group{ flex-wrap:nowrap; white-space:nowrap }
+}
 
 /* small pill to highlight ids in admin or lists */
 .id-chip{ display:inline-block; padding:4px 8px; background: linear-gradient(180deg,#eef2ff,#f8fafc); color: var(--accent); border-radius:999px; font-weight:600; margin-left:6px; border:1px solid rgba(37,99,235,0.08); font-size:13px }

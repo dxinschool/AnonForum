@@ -8,14 +8,17 @@ import Rules from './components/Rules'
 import ToastContainer from './components/ToastContainer'
 import AdminPanel from './components/AdminPanel'
 import AnimatedModal from './components/AnimatedModal'
-import ReactDOM from 'react-dom'
+import ContactAdmin from './components/ContactAdmin.jsx'
+// contact admin removed
 
 export default function App() {
   const [page, setPage] = useState('list')
   const [selected, setSelected] = useState(null)
   const [showAdmin, setShowAdmin] = useState(false)
   const [showChat, setShowChat] = useState(false)
+  const [showContact, setShowContact] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
+  
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -35,6 +38,8 @@ export default function App() {
       try { localStorage.setItem('theme', newTheme) } catch (e) {}
     } catch (e) { /* ignore */ }
   }
+
+  const [showMenu, setShowMenu] = useState(false)
 
   useEffect(() => {
     // initialize from URL ?thread=<id> so share links open directly
@@ -69,26 +74,38 @@ export default function App() {
 
   return (
     <div className="container">
-      <div style={{ position: 'relative' }}>
+      <div className="app-header">
         <h1>Anonymous Forum</h1>
-        <div style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 8 }}>
+        <button className="hamburger" aria-label="Open menu" onClick={() => setShowMenu(s => !s)}>☰</button>
+        <div className="header-actions">
           <button className="btn" onClick={() => setShowChat(s => !s)}>{showChat ? 'Close Chat' : 'Open Chat'}</button>
           <button className="btn" onClick={() => setShowAdmin(s => !s)}>{showAdmin ? 'Close Admin' : 'Admin'}</button>
+          <button className="btn" onClick={() => setShowContact(s => !s)}>{showContact ? 'Close' : 'Contact Admin'}</button>
           <button className="btn" onClick={() => {
-            // toggle between 'light' and 'dark' (user-invoked -> animate)
             const next = theme === 'light' ? 'dark' : 'light'
             applyTheme(next, true)
           }}>{theme === 'light' ? 'Dark' : 'Light'}</button>
+        </div>
+
+        <div className={"mobile-actions" + (showMenu ? ' open' : '')} role="menu">
+          <button className="btn" onClick={() => { setShowChat(s => !s); setShowMenu(false) }}>{showChat ? 'Close Chat' : 'Open Chat'}</button>
+          <button className="btn" onClick={() => { setShowAdmin(s => !s); setShowMenu(false) }}>{showAdmin ? 'Close Admin' : 'Admin'}</button>
+          <button className="btn" onClick={() => { setShowContact(s => !s); setShowMenu(false) }}>{showContact ? 'Close' : 'Contact Admin'}</button>
+          <button className="btn" onClick={() => { const next = theme === 'light' ? 'dark' : 'light'; applyTheme(next, true); setShowMenu(false) }}>{theme === 'light' ? 'Dark' : 'Light'}</button>
         </div>
       </div>
       <Announcement />
   <Rules />
   <ToastContainer />
-      <AnimatedModal visible={showAdmin} onClose={() => setShowAdmin(false)} width={420} height={'auto'}>
+      <AnimatedModal visible={showAdmin} onClose={() => setShowAdmin(false)}>
         <AdminPanel />
       </AnimatedModal>
+      
       <AnimatedModal visible={showChat} onClose={() => setShowChat(false)}>
         <Chat />
+      </AnimatedModal>
+      <AnimatedModal visible={showContact} onClose={() => setShowContact(false)} width={480} height={'auto'}>
+        <ContactAdmin onClose={() => setShowContact(false)} />
       </AnimatedModal>
       {page === 'list' && (
         <>

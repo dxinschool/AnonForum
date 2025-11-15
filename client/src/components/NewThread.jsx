@@ -73,7 +73,7 @@ export default function NewThread({ onCreate }) {
   <input className="input" placeholder="Title" value={title} maxLength={TITLE_MAX} onChange={e => setTitle(e.target.value)} />
   <textarea className="input" rows={4} placeholder="Body (optional)" value={body} maxLength={BODY_MAX} onChange={e => setBody(e.target.value)} />
   <div className="file-upload" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-    <input id="thread-file-input" type="file" accept="image/*" onChange={e => setFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
+    <input id="thread-file-input" type="file" accept="image/*,audio/*,video/*" onChange={e => setFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
     <label htmlFor="thread-file-input" className="btn ghost small" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
         <path d="M21 15V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -82,15 +82,37 @@ export default function NewThread({ onCreate }) {
       Attach image
     </label>
     {preview && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-        <img src={preview} alt="preview" className="thumb" />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div className="file-name" style={{ fontSize: 13, color: '#374151' }}>{file ? file.name : ''} <small style={{ color: '#6b7280' }}>({file ? Math.round(file.size/1024) : ''} KB)</small></div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn secondary small" onClick={() => { setFile(null); setPreview(null) }}>Remove</button>
-            <button type="button" className="btn" onClick={() => toast.show('Preview saved for posting')}>Keep</button>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, maxWidth: '100%', flexWrap: 'wrap' }}>
+        {file && file.type && file.type.startsWith('audio/') ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <audio src={preview} controls style={{ maxWidth: 240 }} />
+            <div className="file-name" style={{ fontSize: 13, color: '#374151' }}>{file ? file.name : ''} <small style={{ color: '#6b7280' }}>({file ? Math.round(file.size/1024) : ''} KB)</small></div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn secondary small" onClick={() => { setFile(null); setPreview(null) }}>Remove</button>
+              <button type="button" className="btn" onClick={() => toast.show('Preview saved for posting')}>Keep</button>
+            </div>
           </div>
-        </div>
+        ) : file && file.type && file.type.startsWith('video/') ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <video src={preview} controls style={{ maxWidth: 320, maxHeight: 240 }} />
+            <div className="file-name" style={{ fontSize: 13, color: '#374151' }}>{file ? file.name : ''} <small style={{ color: '#6b7280' }}>({file ? Math.round(file.size/1024) : ''} KB)</small></div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn secondary small" onClick={() => { setFile(null); setPreview(null) }}>Remove</button>
+              <button type="button" className="btn" onClick={() => toast.show('Preview saved for posting')}>Keep</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+            <img src={preview} alt="preview" className="thumb" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="file-name" style={{ fontSize: 13, color: '#374151' }}>{file ? file.name : ''} <small style={{ color: '#6b7280' }}>({file ? Math.round(file.size/1024) : ''} KB)</small></div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn secondary small" onClick={() => { setFile(null); setPreview(null) }}>Remove</button>
+                <button type="button" className="btn" onClick={() => toast.show('Preview saved for posting')}>Keep</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )}
   </div>

@@ -20,6 +20,9 @@ if (db && typeof db.init === 'function') {
 const app = express();
 app.use(cors());
 app.use(express.json());
+// When behind a proxy or dev tunnel that sets X-Forwarded-* headers, enable trust proxy
+// so express-rate-limit and other middleware can correctly identify client IPs.
+app.set('trust proxy', true)
 
 // create http server and socket.io
 const httpServer = http.createServer(app)
@@ -49,8 +52,12 @@ const storage = multer.diskStorage({
     cb(null, nanoid() + (ext ? ('.' + ext) : ''))
   }
 })
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => {
-  const ok = /image\/(png|jpe?g|gif|webp)/i.test(file.mimetype)
+// Allow images, audio and video uploads. Increase fileSize to 50MB to support short videos.
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 }, fileFilter: (req, file, cb) => {
+  const isImage = /image\/(png|jpe?g|gif|webp)/i.test(file.mimetype)
+  const isAudio = /^audio\//i.test(file.mimetype)
+  const isVideo = /^video\//i.test(file.mimetype)
+  const ok = isImage || isAudio || isVideo
   cb(ok ? null : new Error('Invalid file type'), ok)
 } })
 
@@ -147,11 +154,14 @@ app.post('/api/chat/upload', upload.single('image'), async (req, res) => {
     const fname = req.file.filename
     const filePath = path.join(uploadsDir, fname)
     try {
-      // resize to reasonable width (max 1000)
-      await sharp(filePath).resize({ width: 1000, withoutEnlargement: true }).toFile(filePath + '.resized')
-      await fsp.rename(filePath + '.resized', filePath)
+      // Only attempt image processing for image mime types; skip for audio/video
+      if (req.file && req.file.mimetype && /^image\//i.test(req.file.mimetype)) {
+        // resize to reasonable width (max 1000)
+        await sharp(filePath).resize({ width: 1000, withoutEnlargement: true }).toFile(filePath + '.resized')
+        await fsp.rename(filePath + '.resized', filePath)
+      }
     } catch (err) {
-      console.warn('chat image processing failed, continuing with original', err)
+      console.warn('chat image processing failed or not applicable, continuing with original', err)
     }
     const url = `/uploads/${fname}`
     // Optionally create a chat message when additional form fields are provided
@@ -164,7 +174,10 @@ app.post('/api/chat/upload', upload.single('image'), async (req, res) => {
           id: nanoid(),
           author: maybeAuthor || 'anon',
           text: maybeText,
-          image: url,
+          // depending on mime type expose appropriate field
+          image: req.file && req.file.mimetype && /^image\//i.test(req.file.mimetype) ? url : null,
+          audio: req.file && req.file.mimetype && /^audio\//i.test(req.file.mimetype) ? url : null,
+          video: req.file && req.file.mimetype && /^video\//i.test(req.file.mimetype) ? url : null,
           created_at: Math.floor(Date.now() / 1000)
         }
         await db.addChatMessage(chatMsg)
@@ -262,21 +275,28 @@ app.post('/api/threads', writeLimiter, upload.single('image'), async (req, res) 
   const created_at = now();
   const thread = { id, title, body: body || '', created_at, score: 0, upvotes: 0, downvotes: 0 }
   if (req.file && req.file.filename) {
-    // store a public path to the uploaded image and create a thumbnail
     const fname = req.file.filename
     const filePath = path.join(uploadsDir, fname)
-    const thumbName = 'thumb-' + fname
-    const thumbPath = path.join(uploadsDir, thumbName)
-    try {
-      // create a resized main image (max width 1200) and a small thumb (320)
-      await sharp(filePath).resize({ width: 1200, withoutEnlargement: true }).toFile(filePath + '.resized')
-      await fsp.rename(filePath + '.resized', filePath)
-      await sharp(filePath).resize({ width: 320 }).toFile(thumbPath)
-      thread.image = `/uploads/${fname}`
-      thread.thumb = `/uploads/${thumbName}`
-    } catch (err) {
-      console.warn('image processing failed', err)
-      thread.image = `/uploads/${fname}`
+    // if the upload was audio or video, just store the url; do not run image processing
+    if (req.file.mimetype && /^audio\//i.test(req.file.mimetype)) {
+      thread.audio = `/uploads/${fname}`
+    } else if (req.file.mimetype && /^video\//i.test(req.file.mimetype)) {
+      // store video url; optionally, a later step could generate thumbnails
+      thread.video = `/uploads/${fname}`
+    } else {
+      const thumbName = 'thumb-' + fname
+      const thumbPath = path.join(uploadsDir, thumbName)
+      try {
+        // create a resized main image (max width 1200) and a small thumb (320)
+        await sharp(filePath).resize({ width: 1200, withoutEnlargement: true }).toFile(filePath + '.resized')
+        await fsp.rename(filePath + '.resized', filePath)
+        await sharp(filePath).resize({ width: 320 }).toFile(thumbPath)
+        thread.image = `/uploads/${fname}`
+        thread.thumb = `/uploads/${thumbName}`
+      } catch (err) {
+        console.warn('image processing failed', err)
+        thread.image = `/uploads/${fname}`
+      }
     }
   }
   // parse tags if provided (JSON array or comma-separated string)
@@ -387,6 +407,7 @@ app.post('/api/report', async (req, res) => {
   } catch (err) { console.warn('create report failed', err); res.status(500).json({ error: 'server' }) }
 })
 
+
 app.get('/api/admin/reports', async (req, res) => {
   const auth = (req.headers && req.headers.authorization) || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
@@ -396,6 +417,52 @@ app.get('/api/admin/reports', async (req, res) => {
     const rows = await db.listReports()
     res.json(rows)
   } catch (err) { console.warn('list reports failed', err); res.status(500).json({ error: 'server' }) }
+})
+
+// Admin: list contact messages left via /api/contact
+app.get('/api/admin/contacts', async (req, res) => {
+  const auth = (req.headers && req.headers.authorization) || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  try {
+    const ok = await db.hasAdminToken(token)
+    if (!ok) return res.status(403).json({ error: 'forbidden' })
+    const rows = await db.listContacts()
+    res.json(rows)
+  } catch (err) { console.warn('list contacts failed', err); res.status(500).json({ error: 'server' }) }
+})
+
+// Admin: delete a contact message
+app.delete('/api/admin/contacts/:id', async (req, res) => {
+  const auth = (req.headers && req.headers.authorization) || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  try {
+    const ok = await db.hasAdminToken(token)
+    if (!ok) return res.status(403).json({ error: 'forbidden' })
+    const id = req.params.id
+    const r = await db.deleteContact(id)
+    if (!r || !r.ok) return res.status(404).json({ error: 'not found' })
+    try { await db.addAuditEntry('delete_contact', { id }, token) } catch (e) { console.warn('audit add failed', e) }
+    res.status(200).json({ ok: true })
+  } catch (err) { console.warn('delete contact failed', err); res.status(500).json({ error: 'server' }) }
+})
+
+// Contact form: public endpoint for users to leave messages for admin
+app.post('/api/contact', writeLimiter, async (req, res) => {
+  try {
+    const { name, email, message } = req.body || {}
+    if (!message || String(message).trim().length === 0) return res.status(400).json({ error: 'message required' })
+    try {
+      const saved = await db.addContactMessage({ name, email, message })
+      try { await db.addAuditEntry('contact_message', { id: saved.id, name: saved.name ? true : false }, null) } catch (e) { /* ignore audit errors */ }
+      res.status(201).json(saved)
+    } catch (err) {
+      if (err && err.message === 'blocked_content') return res.status(400).json({ error: 'blocked' })
+      throw err
+    }
+  } catch (err) {
+    console.warn('create contact message failed', err)
+    res.status(500).json({ error: 'server' })
+  }
 })
 
 app.post('/api/admin/reports/:id/resolve', async (req, res) => {
@@ -464,6 +531,48 @@ app.delete('/api/threads/:id', async (req, res) => {
     console.warn('delete thread failed', err)
     res.status(500).json({ error: 'server' })
   }
+})
+
+// Admin: edit thread (title/body/tags)
+app.post('/api/admin/threads/:id/edit', async (req, res) => {
+  const auth = (req.headers && req.headers.authorization) || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  try {
+    const ok = await db.hasAdminToken(token)
+    if (!ok) return res.status(403).json({ error: 'forbidden' })
+    const id = req.params.id
+    const updates = req.body || {}
+    const updated = await db.editThread(id, updates)
+    if (!updated) return res.status(404).json({ error: 'not found' })
+    try { await db.addAuditEntry('edit_thread', { id, updates }, token) } catch (e) { console.warn('audit add failed', e) }
+    // broadcast thread update
+    try {
+      const out = JSON.stringify({ type: 'thread_updated', data: updated })
+      wss.clients.forEach(client => { if (client.readyState === WebSocket.OPEN) client.send(out) })
+    } catch (e) { console.warn('broadcast thread_updated failed', e) }
+    res.json(updated)
+  } catch (err) { console.warn('edit thread failed', err); res.status(500).json({ error: 'server' }) }
+})
+
+// Admin: edit comment body
+app.post('/api/admin/comments/:id/edit', async (req, res) => {
+  const auth = (req.headers && req.headers.authorization) || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  try {
+    const ok = await db.hasAdminToken(token)
+    if (!ok) return res.status(403).json({ error: 'forbidden' })
+    const id = req.params.id
+    const updates = req.body || {}
+    const updated = await db.editComment(id, updates)
+    if (!updated) return res.status(404).json({ error: 'not found' })
+    try { await db.addAuditEntry('edit_comment', { id, updates }, token) } catch (e) { console.warn('audit add failed', e) }
+    // broadcast comment update
+    try {
+      const out = JSON.stringify({ type: 'comment_updated', data: updated })
+      wss.clients.forEach(client => { if (client.readyState === WebSocket.OPEN) client.send(out) })
+    } catch (e) { console.warn('broadcast comment_updated failed', e) }
+    res.json(updated)
+  } catch (err) { console.warn('edit comment failed', err); res.status(500).json({ error: 'server' }) }
 })
 
 // Get single thread with comments
@@ -699,23 +808,6 @@ httpServer.on('upgrade', (request, socket, head) => {
 httpServer.listen(PORT, () => {
   console.log(`Forum server listening on ${PORT}`);
 });
-
-// Serve client SPA when a production build exists at ../client/dist
-try {
-  const clientDist = path.join(__dirname, '..', 'client', 'dist')
-  if (fs.existsSync(clientDist)) {
-    console.log('Serving client from', clientDist)
-    app.use(express.static(clientDist))
-    // For any non-API route, return index.html so the SPA router can handle it
-    app.get('*', (req, res, next) => {
-      const p = req.path || ''
-      if (p.startsWith('/api') || p.startsWith('/uploads') || p.startsWith('/ws') || p.startsWith('/oembed')) return next()
-      res.sendFile(path.join(clientDist, 'index.html'))
-    })
-  }
-} catch (e) {
-  console.warn('checking client dist failed', e)
-}
 
 // Chat pruning: remove messages older than 5 minutes every 60 seconds
 const CHAT_TTL_SECONDS = 60 * 5 // 5 minutes

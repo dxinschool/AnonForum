@@ -14,7 +14,7 @@ const file = path.join(__dirname, 'db.json')
 const adapter = new JSONFile(file)
 
 // Provide default data as the second argument to Low to avoid the "missing default data" error
-const defaultData = { threads: [], comments: [], votes: [], chat: [], admin_tokens: [], announcement: { text: 'Welcome! This is an anonymous forum. Be kind and follow the rules.' }, rules: { text: 'Be respectful. No doxxing. Report abuse.' }, reports: [], reactions: [], polls: [], blocklist: [], audit: [] }
+const defaultData = { threads: [], comments: [], votes: [], chat: [], contacts: [], admin_tokens: [], announcement: { text: 'Welcome! This is an anonymous forum. Be kind and follow the rules.' }, rules: { text: 'Be respectful. No doxxing. Report abuse.' }, reports: [], reactions: [], polls: [], blocklist: [], audit: [] }
 const db = new Low(adapter, defaultData)
 
 function nowSec() { return Math.floor(Date.now() / 1000) }
@@ -47,6 +47,7 @@ async function init() {
   db.data.comments = db.data.comments || defaultData.comments
   db.data.votes = db.data.votes || defaultData.votes
   db.data.chat = db.data.chat || defaultData.chat
+  db.data.contacts = db.data.contacts || defaultData.contacts
   db.data.admin_tokens = db.data.admin_tokens || defaultData.admin_tokens
   db.data.announcement = db.data.announcement === undefined ? defaultData.announcement : db.data.announcement
   db.data.rules = db.data.rules === undefined ? defaultData.rules : db.data.rules
@@ -250,11 +251,20 @@ async function pruneChat(ttlSeconds) {
   // remove uploaded files associated with pruned messages (if any)
   for (const m of old) {
     try {
-      if (m && m.image) {
-        const fn = path.basename(m.image || '')
-        if (fn) {
-          const p = path.join(__dirname, 'uploads', fn)
-          try { await fsp.unlink(p) } catch (e) { /* ignore */ }
+      if (m) {
+        if (m.image) {
+          const fn = path.basename(m.image || '')
+          if (fn) {
+            const p = path.join(__dirname, 'uploads', fn)
+            try { await fsp.unlink(p) } catch (e) { /* ignore */ }
+          }
+        }
+        if (m.audio) {
+          const fa = path.basename(m.audio || '')
+          if (fa) {
+            const pa = path.join(__dirname, 'uploads', fa)
+            try { await fsp.unlink(pa) } catch (e) { /* ignore */ }
+          }
         }
       }
     } catch (e) { console.warn('failed to remove chat uploaded file', e) }
@@ -296,18 +306,27 @@ async function deleteThreadById(id) {
   db.data.threads = (db.data.threads || []).filter(t => t.id !== id)
   // delete associated uploaded files (image and thumbnail) if present
   try {
-    if (thread && thread.image) {
-      const fn = path.basename(thread.image || '')
-      if (fn) {
-        const p = path.join(__dirname, 'uploads', fn)
-        try { await fsp.unlink(p) } catch (e) { /* ignore */ }
+    if (thread) {
+      if (thread.image) {
+        const fn = path.basename(thread.image || '')
+        if (fn) {
+          const p = path.join(__dirname, 'uploads', fn)
+          try { await fsp.unlink(p) } catch (e) { /* ignore */ }
+        }
       }
-    }
-    if (thread && thread.thumb) {
-      const fn2 = path.basename(thread.thumb || '')
-      if (fn2) {
-        const p2 = path.join(__dirname, 'uploads', fn2)
-        try { await fsp.unlink(p2) } catch (e) { /* ignore */ }
+      if (thread.thumb) {
+        const fn2 = path.basename(thread.thumb || '')
+        if (fn2) {
+          const p2 = path.join(__dirname, 'uploads', fn2)
+          try { await fsp.unlink(p2) } catch (e) { /* ignore */ }
+        }
+      }
+      if (thread.audio) {
+        const fa = path.basename(thread.audio || '')
+        if (fa) {
+          const pa = path.join(__dirname, 'uploads', fa)
+          try { await fsp.unlink(pa) } catch (e) { /* ignore */ }
+        }
       }
     }
   } catch (e) { console.warn('failed to remove uploaded files for thread', id, e) }
@@ -322,6 +341,39 @@ async function deleteThreadById(id) {
   })
   await safeWrite()
   return { ok: true }
+}
+
+// Edit thread fields (title, body, tags)
+async function editThread(id, updates) {
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.threads = db.data.threads || []
+  const t = (db.data.threads || []).find(x => x.id === id)
+  if (!t) return null
+  if (updates.title !== undefined) t.title = String(updates.title || '')
+  if (updates.body !== undefined) t.body = String(updates.body || '')
+  if (updates.tags !== undefined) {
+    if (Array.isArray(updates.tags)) t.tags = updates.tags.map(x => String(x).trim()).filter(Boolean)
+    else if (typeof updates.tags === 'string') {
+      try { t.tags = JSON.parse(updates.tags) } catch (e) { t.tags = updates.tags.split(',').map(x => String(x).trim()).filter(Boolean) }
+    }
+  }
+  // do not store edited_at to avoid showing an "edited" indicator in the UI
+  await safeWrite()
+  return t
+}
+
+// Edit comment body
+async function editComment(id, updates) {
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.comments = db.data.comments || []
+  const c = (db.data.comments || []).find(x => x.id === id)
+  if (!c) return null
+  if (updates.body !== undefined) c.body = String(updates.body || '')
+  // do not store edited_at to avoid showing an "edited" indicator in the UI
+  await safeWrite()
+  return c
 }
 
 async function getAnnouncement() {
@@ -388,6 +440,17 @@ async function deleteReport(id) {
   const exists = (db.data.reports || []).some(x => x.id === id)
   if (!exists) return { ok: false }
   db.data.reports = (db.data.reports || []).filter(r => r.id !== id)
+  await safeWrite()
+  return { ok: true }
+}
+
+async function deleteContact(id) {
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.contacts = db.data.contacts || []
+  const exists = (db.data.contacts || []).some(x => x.id === id)
+  if (!exists) return { ok: false }
+  db.data.contacts = (db.data.contacts || []).filter(c => c.id !== id)
   await safeWrite()
   return { ok: true }
 }
@@ -562,6 +625,13 @@ async function getChatMessages(limit = 200) {
   return all.slice(-limit)
 }
 
+async function listContacts(limit = 200) {
+  await db.read()
+  const all = db.data.contacts || []
+  if (!limit) return all.slice()
+  return all.slice(-limit)
+}
+
 async function addChatMessage(msg) {
   await db.read()
   db.data = db.data || defaultData
@@ -576,6 +646,23 @@ async function addChatMessage(msg) {
   db.data.chat.push(msg)
   await safeWrite()
   return msg
+}
+
+async function addContactMessage(entry) {
+  await db.read()
+  db.data = db.data || defaultData
+  db.data.contacts = db.data.contacts || []
+  const id = nanoid()
+  const created_at = Math.floor(Date.now() / 1000)
+  const obj = { id, name: entry && entry.name ? String(entry.name) : null, email: entry && entry.email ? String(entry.email) : null, message: entry && entry.message ? String(entry.message) : '', created_at }
+  // enforce blocklist on message body
+  if (obj.message && typeof obj.message === 'string') {
+    const blocked = await isBlocked(obj.message)
+    if (blocked) throw new Error('blocked_content')
+  }
+  db.data.contacts.push(obj)
+  await safeWrite()
+  return obj
 }
 
 // set pinned flag for a chat message by id
@@ -600,6 +687,9 @@ module.exports = {
   addVote,
   getChatMessages,
   addChatMessage,
+  listContacts,
+  addContactMessage,
+  deleteContact,
   pruneChat,
   setChatPinned,
   addAdminToken,
@@ -628,4 +718,9 @@ module.exports = {
   getPoll,
   votePoll,
   getPollsForThread
+  ,
+  // edits
+  editThread,
+  editComment
 }
+

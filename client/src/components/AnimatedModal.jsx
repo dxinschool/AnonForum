@@ -38,10 +38,9 @@ export default function AnimatedModal({ visible, onClose, width, height, childre
       } catch (e) { return [] }
     }
 
-    // focus first focusable or the modal itself
-    const focusables = getFocusables()
-    if (focusables.length) focusables[0].focus()
-    else try { node.focus() } catch (e) {}
+    // Do not auto-focus form controls inside modals by default. Focus the modal
+    // container itself so typing doesn't jump into inputs (user requested).
+    try { node.focus() } catch (e) {}
 
     const onKey = (e) => {
       if (e.key === 'Escape') {

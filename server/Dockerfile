@@ -24,6 +24,6 @@ COPY . .
 RUN mkdir -p uploads && chown -R node:node .
 
 USER node
-EXPOSE 4000
-ENV PORT=4000
+EXPOSE 4274
+ENV PORT=4274
 CMD ["node", "index.js"]

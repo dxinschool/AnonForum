@@ -83,6 +83,11 @@ export default function Chat() {
     fd.append('image', file)
     try {
       const res = await fetch('/api/chat/upload', { method: 'POST', body: fd })
+      // handle 413 (nginx) with a user-friendly message instead of raw HTML
+      if (res.status === 413) {
+        toast.show('Uploaded file exceeds maximum allowed size', { type: 'error' })
+        return
+      }
       const j = await res.json().catch(() => null)
       if (!res.ok) {
         if (j && j.error === 'blocked') { toast.show('Message blocked by server'); return }

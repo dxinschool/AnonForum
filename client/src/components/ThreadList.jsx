@@ -11,6 +11,7 @@ import toast from '../toast'
 export default function ThreadList({ onOpen }) {
   const [threads, setThreads] = useState([])
   const [copied, setCopied] = useState(null)
+  const [idCopied, setIdCopied] = useState(null)
   const [shareCopied, setShareCopied] = useState(null)
   const [page, setPage] = useState(1)
   const perPage = 5
@@ -125,7 +126,7 @@ export default function ThreadList({ onOpen }) {
       {threads.length === 0 && <div>No threads found.</div>}
       {threads.map(t => (
         <div key={t.id} className="thread">
-          <h3>{t.title}</h3>
+          <h3 className="thread-title">{t.title}</h3>
           {t.tags && t.tags.length > 0 && (
             <div className="tags">
               {t.tags.map(tag => (
@@ -134,7 +135,23 @@ export default function ThreadList({ onOpen }) {
             </div>
           )}
           {t.image && <div style={{ marginBottom: 8 }}><img src={t.image} alt="thread" style={{ maxWidth: 240, maxHeight: 160, display: 'block', borderRadius: 6, cursor: 'pointer' }} onClick={() => { setViewerSrc(t.image); setViewerOpen(true) }} /></div>}
-          <p>{t.body}</p>
+          {t.video && (
+            <div style={{ marginBottom: 8 }}>
+              <video controls src={t.video} style={{ maxWidth: 240, maxHeight: 160, display: 'block', borderRadius:6 }} />
+            </div>
+          )}
+          {t.audio && (
+            <div style={{ marginBottom: 8 }}>
+              <audio controls src={t.audio} style={{ width: '100%', maxWidth: 320 }} />
+            </div>
+          )}
+          {/* truncate long bodies on the list page; full content is shown on the thread detail */}
+          <p className="thread-body">{(t.body || '').length > 240 ? (t.body || '').slice(0, 240) + '…' : (t.body || '')}</p>
+          {(t.body || '').length > 240 && (
+            <div style={{ marginTop: 6 }}>
+              <button className="btn ghost small" onClick={() => onOpen(t)}>Read more</button>
+            </div>
+          )}
           {t.comment_count > 0 && (
             <div className="thread-preview">
               <span className="thread-comments">💬 {t.comment_count} comment{t.comment_count !== 1 ? 's' : ''}</span>
@@ -163,6 +180,14 @@ export default function ThreadList({ onOpen }) {
                 setTimeout(() => setCopied(null), 1500)
               } catch (e) { console.warn('copy failed', e) }
             }}>{copied === t.id ? 'Copied!' : 'Copy'}</button>
+            <button className="btn ghost" onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(String(t.id))
+                setIdCopied(t.id)
+                toast.show('ID copied')
+                setTimeout(() => setIdCopied(null), 1500)
+              } catch (e) { console.warn('copy id failed', e); toast.show('Copy failed') }
+            }}>{idCopied === t.id ? 'Copied!' : 'Copy ID'}</button>
             {adminToken && <button className="btn danger" onClick={async () => {
               setModalType('delete')
               setModalThread(t)
@@ -175,8 +200,8 @@ export default function ThreadList({ onOpen }) {
               setModalReason('')
               setModalOpen(true)
             }}>Report</button>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
-              <button className="btn" onClick={async () => {
+                <div className="vote-controls">
+                  <button className="btn" onClick={async () => {
                 try {
                   const cur = localVotes[t.id]
                   const want = 1
@@ -201,18 +226,18 @@ export default function ThreadList({ onOpen }) {
                   setLocalVotes(next)
                 } catch (err) { console.warn('vote failed', err) }
               }} style={{ background: localVotes[t.id] === -1 ? '#dc3545' : undefined, color: localVotes[t.id] === -1 ? '#fff' : undefined }}>▼</button>
-              <div style={{ marginLeft: 8 }}><small>score: {t.score ?? 0}</small> — <small>{timeAgo(t.created_at)}</small></div>
+              <div className="meta-info"><small>score: {t.score ?? 0}</small> — <small>{timeAgo(t.created_at)}</small></div>
             </div>
           </div>
           {/* reactions bar for quick reacting without opening thread */}
-          <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="reaction-bar" style={{ marginTop: 8 }}>
             {['👍','❤️','😄','😮','😢','👎'].map(emoji => {
               const counts = reactionsMap[t.id] || {}
               // support two shapes from the server: { emoji: number } or { emoji: { count, voters } }
               const raw = counts[emoji]
               const cnt = (raw && typeof raw === 'object') ? (raw.count || 0) : (raw || 0)
               return (
-                <button key={emoji} type="button" className="emoji-btn" onClick={async () => {
+                  <button key={emoji} type="button" className="emoji-btn" onClick={async () => {
                   try {
                     // ensure anon id
                     let voter = localStorage.getItem('anon_id')
@@ -230,7 +255,7 @@ export default function ThreadList({ onOpen }) {
                 }}>
                   <span style={{ marginRight: 6 }}>{emoji}</span>
                   <small style={{ color: 'var(--muted)' }}>{cnt}</small>
-                </button>
+                  </button>
               )
             })}
           </div>
@@ -250,13 +275,13 @@ export default function ThreadList({ onOpen }) {
           ))}
         </div>
       ))}
-      <div className="pagination">
+          <div className="pagination">
         <button className="btn" disabled={page <= 1} onClick={() => { const np = Math.max(1, page - 1); setPage(np); fetchPage(query, np) }}>Prev</button>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ marginRight: 8 }}>Page</div>
-          <input type="number" min={1} max={totalPages} value={page} onChange={e => setPage(Number(e.target.value || 1))} style={{ width: 72, padding: 8, borderRadius: 8, border: '1px solid rgba(15,23,42,0.06)' }} />
+        <div className="pagination-center">
+          <div className="page-label">Page</div>
+          <input className="page-input" type="number" min={1} max={totalPages} value={page} onChange={e => setPage(Number(e.target.value || 1))} />
           <button className="btn" onClick={() => { const np = Math.max(1, Math.min(totalPages, page || 1)); setPage(np); fetchPage(query, np) }}>Go</button>
-          <div style={{ marginLeft: 12 }}> / {totalPages} ({total} threads)</div>
+          <div className="page-total"> / {totalPages} ({total} threads)</div>
         </div>
         <button className="btn" disabled={page >= totalPages} onClick={() => { const np = Math.min(totalPages, page + 1); setPage(np); fetchPage(query, np) }}>Next</button>
       </div>

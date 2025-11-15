@@ -9,11 +9,7 @@ function ensureSocket() {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return socket
   const loc = window.location
   const protocol = loc.protocol === 'https:' ? 'wss' : 'ws'
-  // Allow overriding websocket URL at build time via Vite env VITE_WS_URL.
-  // If not set, fall back to same-origin `/ws`.
-  const configured = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_WS_URL) ? String(import.meta.env.VITE_WS_URL) : ''
-  const wsUrl = configured || `${protocol}://${loc.host}/ws`
-  socket = new WebSocket(wsUrl)
+  socket = new WebSocket(`${protocol}://${loc.host}/ws`)
   socket.addEventListener('open', () => {
     console.log('shared ws open')
     // flush any queued outgoing messages

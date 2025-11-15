@@ -12,6 +12,7 @@ export default function AdminPanel() {
   const [announce, setAnnounce] = useState('')
   const [rulesText, setRulesText] = useState('')
   const [reports, setReports] = useState([])
+  const [contacts, setContacts] = useState([])
   const [blocklist, setBlocklist] = useState([])
   const [audit, setAudit] = useState([])
   const [blocklistEdit, setBlocklistEdit] = useState('')
@@ -58,6 +59,7 @@ export default function AdminPanel() {
     let mounted = true
     if (token) {
       API.listReports().then(r => { if (mounted) setReports(r || []) }).catch(() => {})
+      API.adminListContacts().then(c => { if (mounted) setContacts(c || []) }).catch(() => {})
       API.getRules().then(r => { if (mounted && r) setRulesText(r.text || '') }).catch(() => {})
       // fetch blocklist and audit
       API.adminGetBlocklist().then(b => { if (mounted) { setBlocklist(b || []); setBlocklistEdit((b || []).join('\n')) } }).catch(() => {})
@@ -78,6 +80,18 @@ export default function AdminPanel() {
     })
     return () => { mounted = false; unsubWS() }
   }, [token])
+
+  const deleteContact = async (id) => {
+    try {
+      const out = await API.adminDeleteContact(id)
+      if (out && out.ok) {
+        toast.show('Contact removed')
+        setContacts(prev => (prev || []).filter(x => x.id !== id))
+      } else {
+        toast.show('Delete failed')
+      }
+    } catch (e) { console.warn('delete contact failed', e); toast.show('Delete failed') }
+  }
 
   const postRules = async (e) => {
     e.preventDefault()
@@ -143,23 +157,18 @@ export default function AdminPanel() {
     } catch (e) { console.warn('copy failed', e); toast.show('Copy failed') }
   }
 
-  // normalize audit to an array shape for rendering
-  const auditList = Array.isArray(audit)
-    ? audit
-    : (audit && audit.items && Array.isArray(audit.items) ? audit.items : [])
-
   if (token) return (
     <div style={{ marginBottom: 12 }}>
       <strong>Admin:</strong> <small style={{ color: '#28a745' }}>logged in</small>
       <button className="btn" style={{ marginLeft: 8 }} onClick={logout}>Logout</button>
-      <form onSubmit={postAnnouncement} style={{ marginTop: 8 }}>
+      <form className="admin-controls" onSubmit={postAnnouncement} style={{ marginTop: 8 }}>
         <textarea className="input" rows={2} placeholder="Site announcement (empty to clear)" value={announce} onChange={e => setAnnounce(e.target.value)} />
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn" type="submit">Post Announcement</button>
           <button className="btn secondary" type="button" onClick={clearAnnouncement}>Clear Announcement</button>
         </div>
       </form>
-      <form onSubmit={postRules} style={{ marginTop: 8 }}>
+      <form className="admin-controls" onSubmit={postRules} style={{ marginTop: 8 }}>
         <textarea className="input" rows={3} placeholder="Community rules" value={rulesText} onChange={e => setRulesText(e.target.value)} />
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn" type="submit">Set Rules</button>
@@ -184,13 +193,31 @@ export default function AdminPanel() {
               <button className="btn secondary" onClick={() => { setBlocklistEdit((blocklist || []).join('\n')) }}>Reset</button>
             </div>
           </div>
+          <div className="admin-panel admin-contacts" style={{ maxHeight: 360, overflow: 'auto' }}>
+            <strong>Contact messages</strong>
+            <small style={{ display: 'block', color: '#6b7280' }}>Messages left via Contact Admin form</small>
+            {contacts.length === 0 && <div style={{ marginTop: 8, color: '#666' }}>No contact messages</div>}
+            {(contacts || []).slice().reverse().map(c => (
+              <div key={c.id} style={{ marginTop: 8, padding: 8, border: '1px solid #eee', borderRadius: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div><strong>{c.name || 'Anonymous'}</strong> {c.email ? (<small style={{ marginLeft: 8, color: '#6b7280' }}>{c.email}</small>) : null}</div>
+                  <div><small>{new Date((c.created_at || 0) * 1000).toLocaleString()}</small></div>
+                </div>
+                <div style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{c.message}</div>
+                <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                  <button className="btn small ghost" onClick={() => copyId(c.id)}>Copy ID</button>
+                  <button className="btn danger small" onClick={() => deleteContact(c.id)}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
           <div className="admin-panel admin-audit">
             <strong>Audit log</strong>
             <div className="audit-list">
               <div style={{ marginBottom: 8 }}>
                 <button className="btn small" onClick={refreshAudit}>Refresh</button>
               </div>
-              {auditList.slice(0, 50).map(a => (
+              {(audit || []).slice(0,50).map(a => (
                 <div key={a.id} className="audit-row">
                   <div className="audit-action">{a.action} <small className="muted-small">{a.admin_token ? 'admin' : ''}</small></div>
                   <div className="audit-time">{new Date((a.ts || a.created_at || Math.floor(Date.now()/1000)) * 1000).toLocaleString()}</div>
@@ -224,6 +251,7 @@ export default function AdminPanel() {
             </div>
           </div>
         ))}
+        
       </div>
       <Modal isOpen={deleteModalOpen} title="Confirm delete report" onCancel={closeDeleteModal} onConfirm={confirmDeleteReport} confirmText="Delete report" cancelText="Cancel">
         Are you sure you want to remove this report for thread {toDeleteReport ? String(toDeleteReport.target_id) : ''}? This will remove the report message from the queue.
@@ -232,7 +260,7 @@ export default function AdminPanel() {
   )
 
   return (
-    <form onSubmit={login} style={{ marginBottom: 12 }}>
+    <form className="admin-login" onSubmit={login} style={{ marginBottom: 12 }}>
       <input className="input" type="password" placeholder="Admin password" value={password} onChange={e => setPassword(e.target.value)} />
       <button className="btn" type="submit">Admin Login</button>
       {error && <div style={{ color: 'red' }}>{error}</div>}
